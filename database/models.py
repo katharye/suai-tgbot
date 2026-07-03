@@ -29,11 +29,11 @@ class Schedule(Base):
     weekday: Mapped[str] = mapped_column(String(20))
     class_num: Mapped[int] = mapped_column(Integer)
     subject: Mapped[str] = mapped_column(String(255))
-    start_time: Mapped[str] = mapped_column(Time)               # don't know if it's Time or String format object yet
-    send_time: Mapped[str] = mapped_column(Time)                # same
+    start_time: Mapped[str] = mapped_column(Time)                   # don't know if it's Time or String format object yet
+    send_time: Mapped[str] = mapped_column(Time)                    # same
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
-    hash: Mapped[str] = mapped_column(String(255))              # don't know the hash length yet
+    hash: Mapped[str] = mapped_column(String(255))                  # don't know the hash length yet
 
     group: Mapped["Group"] = relationship(back_populates="schedules")
 
@@ -44,7 +44,7 @@ class TgUser(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
     notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_time: Mapped[str] = mapped_column(Time, nullable=True)
+    notify_time: Mapped[str] = mapped_column(Time, nullable=True)           #only one notify time for now
     notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
 
     group: Mapped["Group"] = relationship(back_populates="users")
@@ -63,7 +63,7 @@ class Homework(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tg_user_id: Mapped[int] = mapped_column(ForeignKey("tg_users.tg_id"))
     name: Mapped[str] = mapped_column(String(255))
-    file_id: Mapped[str] = mapped_column(String(255))           #Telegram file_id
+    file_id: Mapped[str] = mapped_column(String(255))               #Telegram file_id
 
     user: Mapped["TgUser"] = relationship(back_populates="homeworks")
 
