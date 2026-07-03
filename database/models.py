@@ -12,6 +12,7 @@ class Base(DeclarativeBase):
 
 class Group(Base):
     __tablename__ = "groups"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50), unique=True)
 
@@ -28,11 +29,11 @@ class Schedule(Base):
     weekday: Mapped[str] = mapped_column(String(20))
     class_num: Mapped[int] = mapped_column(Integer)
     subject: Mapped[str] = mapped_column(String(255))
-    start_time: Mapped[str] = mapped_column(Time)
-    end_time: Mapped[str] = mapped_column(Time)
+    start_time: Mapped[str] = mapped_column(Time)               # don't know if it's Time or String format object yet
+    send_time: Mapped[str] = mapped_column(Time)                # same
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
-    hash: Mapped[str] = mapped_column(String(255)) # don't know hash length yet
+    hash: Mapped[str] = mapped_column(String(255))              # don't know the hash length yet
 
     group: Mapped["Group"] = relationship(back_populates="schedules")
 
@@ -46,13 +47,37 @@ class TgUser(Base):
     notify_time: Mapped[str] = mapped_column(Time, nullable=True)
     notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
 
+    group: Mapped["Group"] = relationship(back_populates="users")
+    homeworks: Mapped[list["Homework"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
-class HomeWork(Base):
+    filters: Mapped[list["Filter"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class Homework(Base):
     __tablename__ = "homeworks"
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tg_user_id: Mapped[int] = mapped_column(ForeignKey("tg_users.tg_id"))
+    name: Mapped[str] = mapped_column(String(255))
+    file_id: Mapped[str] = mapped_column(String(255))           #Telegram file_id
+
+    user: Mapped["TgUser"] = relationship(back_populates="homeworks")
 
 
 class Filter(Base):
     __tablename__ = "filters"
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tg_user_id: Mapped[int] = mapped_column(ForeignKey("tg_users.tg_id"))
+    subject: Mapped[str] = mapped_column(String(255))
+
+    user: Mapped["TgUser"] = relationship(back_populates="filters")
+
+    __table_args__ = (
+        UniqueConstraint("tg_user_id", "subject", name="uq_user_subject"),
+    )
     
