@@ -9,6 +9,7 @@ class Base(DeclarativeBase):
     """Common parent class for all models. Necessary for Alembic"""
     pass
 
+
 class Group(Base):
     __tablename__ = "groups"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -16,6 +17,7 @@ class Group(Base):
 
     schedules: Mapped[list["Schedule"]] = relationship(back_populates="group")
     users: Mapped[list["TgUser"]] = relationship(back_populates="group")
+
 
 class Schedule(Base):
     __tablename__ = "schedule"
@@ -30,15 +32,20 @@ class Schedule(Base):
     end_time: Mapped[str] = mapped_column(Time)
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
-    hash: Mapped[str] = mapped_column(String(255)) # don't know hash lengh yet
+    hash: Mapped[str] = mapped_column(String(255)) # don't know hash length yet
 
     group: Mapped["Group"] = relationship(back_populates="schedules")
+
 
 class TgUser(Base):
     __tablename__ = "tg_users"
 
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
+    notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_time: Mapped[str] = mapped_column(Time, nullable=True)
+    notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
+
 
 class HomeWork(Base):
     __tablename__ = "homeworks"
