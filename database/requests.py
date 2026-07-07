@@ -1,15 +1,15 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Group, Schedule, TgUser, Homework, Filter
+from database.models import Group, TgUser, Schedule, Homework, Filter
 
 
 async def get_user(session: AsyncSession, tg_id: int) -> TgUser | None:
-    return await session.get(TgUser, tg_id)         # метод для доступа по первичному ключу 
+    return await session.get(TgUser, tg_id) 
 
 
 async def create_user(session: AsyncSession, tg_id: int, group_id: int) -> TgUser:
-    user = TgUser(tg_id = tg_id, group_id = group_id)
+    user = TgUser(tg_id=tg_id, group_id=group_id)
     session.add(user)
     await session.commit()
 
@@ -53,3 +53,10 @@ async def find_groups(session: AsyncSession, name: str) -> list[Group]:
     groups = list(result.scalars().all())
 
     return groups
+
+
+async def delete_user(session: AsyncSession, tg_id: int) -> None:
+    user = await session.get(TgUser, tg_id)
+    if user is not None:
+        await session.delete(user)
+        await session.commit()
