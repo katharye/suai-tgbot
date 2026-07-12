@@ -2,9 +2,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
-BASE_DIR = Path(__file__).parent
-FONTS_DIR = BASE_DIR / "fonts"
-IMAGES_DIR = BASE_DIR / "images"
+BASE_DIR = Path(__file__).parent.parent
+ASSETS_DIR = BASE_DIR.parent / "assets"
+FONTS_DIR = ASSETS_DIR / "fonts"
+IMAGES_DIR = ASSETS_DIR / "images"
 
 def generate_schedule_image(day_name: str, schedule_list: list[dict]) -> BytesIO:
     background_path = IMAGES_DIR / "background.png"
