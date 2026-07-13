@@ -27,10 +27,10 @@ class Schedule(Base):
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
     week: Mapped[str] = mapped_column(String(20))
     weekday: Mapped[str] = mapped_column(String(20))
-    class_num: Mapped[int] = mapped_column(Integer)
+    pair_num: Mapped[int] = mapped_column(Integer)
     subject: Mapped[str] = mapped_column(String(255))
     start_time: Mapped[str] = mapped_column(Time)                   # don't know if it's Time or String format object yet
-    send_time: Mapped[str] = mapped_column(Time)                    # same
+    end_time: Mapped[str] = mapped_column(Time)                    # same
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
     hash: Mapped[str] = mapped_column(String(255))                  # don't know the hash length yet
@@ -45,7 +45,7 @@ class TgUser(Base):
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
     notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_time: Mapped[str] = mapped_column(Time, nullable=True)           #only one notify time for now
-    notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
+    notify_before_min: Mapped[int] = mapped_column(Integer, default=15)
 
     group: Mapped["Group"] = relationship(back_populates="users")
     homeworks: Mapped[list["Homework"]] = relationship(
