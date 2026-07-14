@@ -1,8 +1,8 @@
 """initial tables
 
-Revision ID: 93e554555025
+Revision ID: cb48fb4d4bee
 Revises: 
-Create Date: 2026-07-03 22:43:13.565406
+Create Date: 2026-07-14 17:12:47.013226
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '93e554555025'
+revision: str = 'cb48fb4d4bee'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,10 +32,10 @@ def upgrade() -> None:
     sa.Column('group_id', sa.Integer(), nullable=False),
     sa.Column('week', sa.String(length=20), nullable=False),
     sa.Column('weekday', sa.String(length=20), nullable=False),
-    sa.Column('class_num', sa.Integer(), nullable=False),
+    sa.Column('pair_num', sa.Integer(), nullable=False),
     sa.Column('subject', sa.String(length=255), nullable=False),
-    sa.Column('start_time', sa.Time(), nullable=False),
-    sa.Column('send_time', sa.Time(), nullable=False),
+    sa.Column('start_time', sa.Integer(), nullable=True),
+    sa.Column('end_time', sa.Integer(), nullable=True),
     sa.Column('teacher', sa.String(length=255), nullable=False),
     sa.Column('room', sa.String(length=50), nullable=False),
     sa.Column('hash', sa.String(length=255), nullable=False),
@@ -45,9 +45,8 @@ def upgrade() -> None:
     op.create_table('tg_users',
     sa.Column('tg_id', sa.BigInteger(), nullable=False),
     sa.Column('group_id', sa.Integer(), nullable=False),
-    sa.Column('notify_enabled', sa.Boolean(), nullable=False),
-    sa.Column('notify_time', sa.Time(), nullable=True),
-    sa.Column('notify_before_min', sa.Integer(), nullable=False),
+    sa.Column('notify_time', sa.Integer(), nullable=True),
+    sa.Column('notify_before_min', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ),
     sa.PrimaryKeyConstraint('tg_id')
     )

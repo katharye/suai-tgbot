@@ -5,8 +5,7 @@ from sqlalchemy import (
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-class Base(DeclarativeBase):
-    """Common parent class for all models. Necessary for Alembic"""
+class Base(DeclarativeBase): 
     pass
 
 
@@ -29,8 +28,8 @@ class Schedule(Base):
     weekday: Mapped[str] = mapped_column(String(20))
     pair_num: Mapped[int] = mapped_column(Integer)
     subject: Mapped[str] = mapped_column(String(255))
-    start_time: Mapped[str] = mapped_column(Time)                   # don't know if it's Time or String format object yet
-    end_time: Mapped[str] = mapped_column(Time)                    # same
+    start_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
     hash: Mapped[str] = mapped_column(String(255))                  # don't know the hash length yet
@@ -43,9 +42,8 @@ class TgUser(Base):
 
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
-    notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_time: Mapped[str] = mapped_column(Time, nullable=True)           #only one notify time for now
-    notify_before_min: Mapped[int] = mapped_column(Integer, default=15)
+    notify_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notify_before_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     group: Mapped["Group"] = relationship(back_populates="users")
     homeworks: Mapped[list["Homework"]] = relationship(
