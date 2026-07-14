@@ -17,5 +17,3 @@ def get_time_notifications_all_session(strr: str)->int | None:
         return res_time
     except Exception:
         return False
-
-print(get_time_notifications_all_session('23:59'))
