@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 import json 
 
-async def get_ids_group():
+async def get_ids_group() -> dict:
     async with aiohttp.ClientSession() as session:
         async with session.get('https://guap.ru/rasp') as response:
             body = await response.text()
