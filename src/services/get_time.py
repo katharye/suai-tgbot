@@ -7,13 +7,16 @@ def get_time_notifications_one_session(strr: str)->int | None: # в секунд
     
     try:
         t = strr.split(':')
-        return int(t[0]) * 3600 + int(t[1]) * 60
+        seconds = int(t[0]) * 3600 + int(t[1]) * 60
+        if seconds > 10800 or len(t) != 2:
+            raise
+        return seconds
     except Exception:
         return None
 
-def get_time_notifications_all_session(strr: str)->int | None:
+def get_time_notifications_all_session(strr: str) -> int | None:
     try:
         res_time = datetime.strptime(strr, "%H:%M").time()
-        return res_time
+        return res_time.hour * 3600 + res_time.minute * 60
     except Exception:
-        return False
+        return None
