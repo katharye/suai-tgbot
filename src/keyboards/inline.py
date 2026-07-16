@@ -1,5 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, \
-    InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 def generateGroupsKeyboard(groups: list[str]) -> InlineKeyboardMarkup:
@@ -30,5 +29,26 @@ def applyResetKeyboard() -> InlineKeyboardMarkup:
                          style="danger", icon_custom_emoji_id="5375142362534148649")
     return resetKeyboard.as_markup()
 
+def notifyBeforeLessonsKeyboard() -> InlineKeyboardMarkup:
+    notifyKeyboard = InlineKeyboardBuilder()
 
-# КАЛЕНДАРЬ 52516137687517977722
+    for notifyTime in range(5, 31, 5):
+        notifyKeyboard.button(text=f"{notifyTime} минут", 
+                              callback_data=f"BEFORELESSONS_{notifyTime}", 
+                              icon_custom_emoji_id="5974076810386738645"
+        )
+    notifyKeyboard.button(text="Своё значение", 
+                          callback_data="USERS_TIME_BEFORELESSONS", 
+                          icon_custom_emoji_id="5371053145646441722",
+                          style="primary"
+    )
+
+    notifyKeyboard.button(text="Не присылать", 
+                          callback_data="BEFORELESSONS_DONT_NOTIFY", 
+                          icon_custom_emoji_id="5974565736578813237",
+                          style="danger"
+    )
+
+    adjust_shema = [2] * 3 + [1] * 2
+    notifyKeyboard.adjust(*adjust_shema)
+    return notifyKeyboard.as_markup()
