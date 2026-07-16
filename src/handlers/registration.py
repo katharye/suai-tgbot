@@ -1,20 +1,26 @@
 from aiogram import Router, F
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from keyboards.inline import generateGroupsKeyboard, applyResetKeyboard
-registration_router = Router()
+from keyboards.inline import generateGroupsKeyboard, applyResetKeyboard, notifyBeforeLessonsKeyboard
+from keyboards.reply import notifyBeforeAllLessonsKeyboard
+
 from database.requests import find_groups, get_user, get_or_create_group, create_user, delete_user
+from services.get_time import get_time_notifications_all_session, get_time_notifications_one_session
+
+registration_router = Router()
 
 class Registration(StatesGroup):
-    waitingResetConfirm = State()   # Ожидание подтверждения ресета 
-    waitingForGroup     = State()   # Ожидание ввода группы
-    waitingConfirmation = State()   # Ожидание подтверждения группы
-    waitingTimeNotify   = State()   # Ожидание выбора времени уведомлений перед парой
-    waitingAllDayNotyfy = State()   # Ожидание выбора времени уведомлений перед всеми парами
+    waitingResetConfirm    = State()   # Ожидание подтверждения ресета 
+    waitingForGroup        = State()   # Ожидание ввода группы
+    waitingConfirmation    = State()   # Ожидание подтверждения группы
+    waitingTimeNotify      = State()   # Ожидание выбора времени уведомлений перед парой
+    waitingWriteTimeNotify = State()   # Ожидание выбора времени уведомлений перед парой
+    waitingAllDayNotyfy    = State()   # Ожидание выбора времени уведомлений перед всеми парами
 
 # Если пользователь уже регистрировался, ему предложат ресетнуть настройки с удалением всех данных, иначе регистрация
 @registration_router.message(CommandStart())
@@ -62,17 +68,20 @@ async def readGroupNum(message: Message, state: FSMContext, session: AsyncSessio
         await message.answer(text="Схожей группы не нашлось. Повторите попытку")
 
 
-# Если пользователь подтверждает группу, регистрация проходит успешно, выход из FSM 
+# Если пользователь подтверждает группу, появляется выбор времени для уведомлений 
 @registration_router.callback_query(Registration.waitingConfirmation, F.data.startswith("group_"))
 async def confirmation(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     await callback.answer()
     selected_group = callback.data.replace("group_", "", 1)
     
     group = await get_or_create_group(session=session, name=selected_group)
-    await create_user(session=session, tg_id=callback.from_user.id, group_id=group.id)
-    
-    await callback.message.edit_text(f"Успешно выбранна группа <b>{selected_group}</b>!", parse_mode="HTML")
-    await state.clear()
+    await state.update_data(groupName=selected_group)
+    await state.update_data(groupId=group.id)
+    await state.update_data(tgId=callback.from_user.id)
+        
+    await callback.message.edit_text("Я могу присылать уведомления о предстоящей паре за несколько минут до неё. Если нужно, укажи за сколько.",
+                                     reply_markup=notifyBeforeLessonsKeyboard())
+    await state.set_state(Registration.waitingTimeNotify)
 
 # Пользователь возвращается назад к выбору группы 
 @registration_router.callback_query(Registration.waitingConfirmation, F.data == "SETTUP_BACK")
@@ -80,3 +89,50 @@ async def backToGroupSelection(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.edit_text(f"Привет, {callback.from_user.full_name}, напиши свою группу!")
     await state.set_state(Registration.waitingForGroup)
+
+# Пользователь решил написать время для оповещения о паре сам
+@registration_router.callback_query(Registration.waitingTimeNotify, F.data.startswith("USERS_TIME_BEFORELESSONS"))
+async def writeUsersTime(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.answer("Напиши время, за которое тебе надо отправлять уведомление о парах (максимум 3 часа, формат времени ЧЧ:ММ)")
+    await state.set_state(Registration.waitingWriteTimeNotify)
+
+# Ванидация времени, которое ввёл пользователь
+@registration_router.message(Registration.waitingWriteTimeNotify)
+async def usersNotifyBeforeLessonConfirm(message: Message, state: FSMContext):
+    result = get_time_notifications_one_session(message.text)
+    if not result: 
+        await message.answer("Время написано некорректно! Напиши время в формате ЧЧ:ММ, не более 3 часов (к примеру 02:21)")
+    else:
+        await message.answer("Ещё я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>",
+                                     parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
+        await state.update_data(notifyBeforeLessons=result)
+        await state.set_state(Registration.waitingAllDayNotyfy)
+
+
+# Пользователь выбрал время уведомлений о конкретной паре
+@registration_router.callback_query(Registration.waitingTimeNotify, F.data.startswith("BEFORELESSONS_"))
+async def notifyBeforeLessonsConfirm(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    selected_variant = callback.data.replace("BEFORELESSONS_", "", 1)
+    if selected_variant == "DONT_NOTIFY":
+        await state.update_data(notifyBeforeLessons=None)
+    else:
+        await state.update_data(notifyBeforeLessons=(int(selected_variant) * 60))
+    
+    await callback.message.answer("Ещё я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>",
+                                     parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
+    await state.set_state(Registration.waitingAllDayNotyfy)
+    
+@registration_router.message(Registration.waitingAllDayNotyfy)
+async def notifyBeforeAllLessonsConfirm(message: Message, state: FSMContext):
+    result = get_time_notifications_all_session(message.text)
+    if not result and message.text != "Не присылать":
+        await message.answer(text="<b>Время должно быть в формате ЧЧ:ММ!</b> \nДля продолжения введи корректное время или выбери из предложенного", parse_mode="HTML")
+    else:
+        await state.update_data(timeAllNotify=result)
+        data = await state.get_data()
+        await message.answer(f"<b>Регистрация окончена!</b>\nГруппа: {data.get("groupName")}\nВремя уведомлений перед парой: {data.get("notifyBeforeLessons") if data.get("notifyBeforeLessons") else "Не присылать"}\nВремя уведомлений перед учебным днём: {data.get("timeAllNotify") if data.get("timeAllNotify") else "Не присылать"}",
+                             parse_mode="HTML",
+                             reply_markup=ReplyKeyboardRemove())
+        await state.clear()
