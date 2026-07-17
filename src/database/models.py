@@ -29,11 +29,10 @@ class Schedule(Base):
     weekday: Mapped[str] = mapped_column(String(20))
     class_num: Mapped[int] = mapped_column(Integer)
     subject: Mapped[str] = mapped_column(String(255))
-    start_time: Mapped[str] = mapped_column(Time)                   # don't know if it's Time or String format object yet
-    send_time: Mapped[str] = mapped_column(Time)                    # same
+    start_time: Mapped[int] = mapped_column(Integer)  # seconds from start of day
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
-    hash: Mapped[str] = mapped_column(String(255))                  # don't know the hash length yet
+    hash: Mapped[str] = mapped_column(String(255))
 
     group: Mapped["Group"] = relationship(back_populates="schedules")
 
@@ -44,7 +43,7 @@ class TgUser(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
     notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_time: Mapped[str] = mapped_column(Time, nullable=True)           #only one notify time for now
+    notify_time: Mapped[int] = mapped_column(Integer, nullable=True)  # seconds from start of day
     notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
 
     group: Mapped["Group"] = relationship(back_populates="users")
@@ -54,6 +53,10 @@ class TgUser(Base):
 
     filters: Mapped[list["Filter"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+    hidden_subjects: Mapped[list["HiddenSubject"]] = relationship(
+        cascade="all, delete-orphan"
     )
 
 
@@ -79,5 +82,25 @@ class Filter(Base):
 
     __table_args__ = (
         UniqueConstraint("tg_user_id", "subject", name="uq_user_subject"),
+    )
+
+
+class ClassTime(Base):
+    __tablename__ = "class_times"
+
+    class_num: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_time: Mapped[int] = mapped_column(Integer)  # seconds from start of day
+
+
+class HiddenSubject(Base):
+    __tablename__ = "hidden_subjects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tg_user_id: Mapped[int] = mapped_column(ForeignKey("tg_users.tg_id"))
+    subject: Mapped[str] = mapped_column(String(255))
+    weekday: Mapped[str] = mapped_column(String(20))
+
+    __table_args__ = (
+        UniqueConstraint("tg_user_id", "subject", "weekday", name="uq_user_subject_weekday"),
     )
     
