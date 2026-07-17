@@ -7,9 +7,9 @@ from aiogram.fsm.state import StatesGroup, State
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from keyboards.inline import generateGroupsKeyboard, applyResetKeyboard, notifyBeforeLessonsKeyboard
-from keyboards.reply import notifyBeforeAllLessonsKeyboard
+from keyboards.reply import notifyBeforeAllLessonsKeyboard, mainMenuKeyboard
 
-from database.requests import find_groups, get_user, get_or_create_group, create_user, delete_user
+from database.requests import find_groups, get_user, get_or_create_group, create_user, delete_user, update_user_notify_time, update_user_notify_before_min
 from services.get_time import get_time_notifications_all_session, get_time_notifications_one_session
 
 registration_router = Router()
@@ -125,14 +125,36 @@ async def notifyBeforeLessonsConfirm(callback: CallbackQuery, state: FSMContext)
     await state.set_state(Registration.waitingAllDayNotyfy)
     
 @registration_router.message(Registration.waitingAllDayNotyfy)
-async def notifyBeforeAllLessonsConfirm(message: Message, state: FSMContext):
+async def notifyBeforeAllLessonsConfirm(message: Message, state: FSMContext, session: AsyncSession):
     result = get_time_notifications_all_session(message.text)
     if not result and message.text != "Не присылать":
         await message.answer(text="<b>Время должно быть в формате ЧЧ:ММ!</b> \nДля продолжения введи корректное время или выбери из предложенного", parse_mode="HTML")
     else:
         await state.update_data(timeAllNotify=result)
         data = await state.get_data()
+        
+        # Сохраняем пользователя в базу данных
+        user = await create_user(
+            session=session,
+            tg_id=data.get("tgId"),
+            group_id=data.get("groupId")
+        )
+        
+        # Обновляем время уведомлений перед учебным днём (в секундах)
+        await update_user_notify_time(
+            session=session,
+            tg_id=data.get("tgId"),
+            notify_time=data.get("timeAllNotify")
+        )
+        
+        # Обновляем время уведомления перед парой (в минутах)
+        await update_user_notify_before_min(
+            session=session,
+            tg_id=data.get("tgId"),
+            notify_before_min=data.get("notifyBeforeLessons") or 15
+        )
+        
         await message.answer(f"<b>Регистрация окончена!</b>\nГруппа: {data.get("groupName")}\nВремя уведомлений перед парой: {data.get("notifyBeforeLessons") if data.get("notifyBeforeLessons") else "Не присылать"}\nВремя уведомлений перед учебным днём: {data.get("timeAllNotify") if data.get("timeAllNotify") else "Не присылать"}",
                              parse_mode="HTML",
-                             reply_markup=ReplyKeyboardRemove())
+                             reply_markup=mainMenuKeyboard())
         await state.clear()
