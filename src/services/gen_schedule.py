@@ -41,7 +41,8 @@ def generate_schedule_image(day_name: str, schedule_list: list[dict]) -> BytesIO
         draw.text((40, y), "Пар нет, можно отдыхать!", font=font_text, fill=(50, 70, 90))
     else:
         for item in schedule_list:
-            draw.text((40, y), f"{item['time']}  —  {item['subject']}", font=font_text, fill=(30, 50, 70))
+            lesson_type_display = f" [{item['lesson_type']}]" if item.get('lesson_type') else ""
+            draw.text((40, y), f"{item['time']}  —  {item['subject']}{lesson_type_display}", font=font_text, fill=(30, 50, 70))
             
             sub_info = f"Ауд: {item['room']}   |   Преподователь: {item['teacher']}"
             draw.text((55, y + 32), sub_info, font=font_subtext, fill=(60, 80, 100))
@@ -101,7 +102,8 @@ def generate_week_schedule_image(week_schedule: dict[str, list[dict]], week_text
         
         # Пары
         for item in week_schedule[day]:
-            draw.text((40, y), f"{item['time']}  —  {item['subject']}", font=font_text, fill=(30, 50, 70))
+            lesson_type_display = f" [{item['lesson_type']}]" if item.get('lesson_type') else ""
+            draw.text((40, y), f"{item['time']}  —  {item['subject']}{lesson_type_display}", font=font_text, fill=(30, 50, 70))
             
             sub_info = f"Ауд: {item['room']}   |   Преподователь: {item['teacher']}"
             draw.text((55, y + 30), sub_info, font=font_subtext, fill=(60, 80, 100))

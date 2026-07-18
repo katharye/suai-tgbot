@@ -109,7 +109,8 @@ async def load_all_lessons_in_db(message: Message, session: AsyncSession):
                         start_time=start_time,
                         teacher=lesson_info['teacher'],
                         room=lesson_info['audience'],
-                        lesson_hash=lesson_hash
+                        lesson_hash=lesson_hash,
+                        lesson_type=lesson_info.get('type_session')
                     )
                     total_lessons += 1
     

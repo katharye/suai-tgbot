@@ -5,13 +5,23 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from keyboards.inline import generateGroupsKeyboard, dayNavigationKeyboard, weekViewKeyboard, daySelectionKeyboard, nextWeekViewKeyboard, nextDaySelectionKeyboard, weekToggleKeyboard, nextWeekToggleKeyboard, hideSubjectDayKeyboard, viewHiddenSubjectDayKeyboard
-from keyboards.reply import mainMenuKeyboard
-from database.requests import get_user, get_schedule, add_hidden_subject, get_hidden_subjects_by_day, remove_hidden_subject
+from keyboards.inline import generateGroupsKeyboard, dayNavigationKeyboard, weekViewKeyboard, daySelectionKeyboard, nextWeekViewKeyboard, nextDaySelectionKeyboard, weekToggleKeyboard, nextWeekToggleKeyboard, hideSubjectDayKeyboard, viewHiddenSubjectDayKeyboard, homeworkListKeyboard, homeworkAddKeyboard, homeworkViewKeyboard, notifyBeforeLessonsKeyboard, applyResetKeyboard, settingsInlineKeyboard
+from keyboards.reply import mainMenuKeyboard, settingsKeyboard, notifyBeforeAllLessonsKeyboard
+from database.requests import get_user, get_schedule, add_hidden_subject, get_hidden_subjects_by_day, remove_hidden_subject, add_homework, get_user_homeworks, delete_homework, update_user_notify_time, update_user_notify_before_min, delete_user
 from services.gen_schedule import generate_schedule_image, generate_week_schedule_image
+from services.get_time import get_time_notifications_all_session, get_time_notifications_one_session, get_week_type
 from datetime import datetime, date, timedelta
 
 user_router = Router()
+
+
+def format_time(seconds: int | None) -> str:
+    """Форматирует секунды в формат ЧЧ:ММ."""
+    if seconds is None:
+        return "Не указано"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    return f"{hours:02d}:{minutes:02d}"
 
 class ScheduleNavigation(StatesGroup):
     navigating = State()
@@ -27,34 +37,23 @@ class ViewHiddenSubjects(StatesGroup):
     selecting_day = State()
     viewing_subjects = State()
 
+
+class HomeworkManagement(StatesGroup):
+    viewing_list = State()
+    adding_name = State()
+    adding_description = State()
+    adding_file = State()
+    adding_remind_time = State()
+
+
+class SettingsManagement(StatesGroup):
+    in_settings = State()
+    changing_notify_before = State()
+    changing_notify_day = State()
+    confirming_reset = State()
+
 # Хранилище для сообщений с расписанием (для редактирования)
 schedule_messages = {}
-
-def get_week_type(current_date: date = None) -> str:
-    """Определяет тип недели: 'up' (нечётная), 'down' (чётная) или 'all' (все).
-    Сентябрь - начало учебного года, всегда нечётная неделя."""
-    if current_date is None:
-        current_date = date.today()
-    
-    # Начало учебного года - 1 сентября (нечётная неделя)
-    start_date = date(current_date.year, 9, 1)
-    
-    # Если текущая дата до 1 сентября, считаем от прошлого года
-    if current_date < start_date:
-        start_date = date(current_date.year - 1, 9, 1)
-    
-    # Количество дней от начала учебного года
-    days_diff = (current_date - start_date).days
-    
-    # Номер недели (начиная с 0)
-    week_number = days_diff // 7
-    
-    # Нечётные недели - week_number чётный (0, 2, 4...)
-    # Чётные недели - week_number нечётный (1, 3, 5...)
-    if week_number % 2 == 0:
-        return "up"  # Нечётная
-    else:
-        return "down"  # Чётная
 
 @user_router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -66,6 +65,15 @@ async def cmd_start(message: Message):
 
 @user_router.message(Command("main"))
 async def cmd_main(message: Message):
+    await message.answer(
+        "Главное меню 🎓\n\n"
+        "Выберите действие:",
+        reply_markup=mainMenuKeyboard()
+    )
+
+
+@user_router.message(Command("menu"))
+async def cmd_menu(message: Message):
     await message.answer(
         "Главное меню 🎓\n\n"
         "Выберите действие:",
@@ -117,7 +125,10 @@ async def cmd_today(message: Message, session: AsyncSession, state: FSMContext):
             # Индикатор типа недели для конкретной пары
             lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
             
-            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+            # Тип занятия
+            lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+            
+            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
             response += f"   🕐 {time_str}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n"
             response += f"   🏢 {lesson.room}\n\n"
@@ -171,7 +182,10 @@ async def cmd_tomorrow(message: Message, session: AsyncSession, state: FSMContex
             minutes = (lesson.start_time % 3600) // 60
             time_str = f"{hours:02d}:{minutes:02d}"
             
-            response += f"� {lesson.class_num}. {lesson.subject}\n"
+            # Тип занятия
+            lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+            
+            response += f"🔹 {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
             response += f"   🕐 {time_str}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n"
             response += f"   🏢 {lesson.room}\n\n"
@@ -190,13 +204,183 @@ async def cmd_this_week(message: Message):
 async def cmd_next_week(message: Message):
     await message.answer("Выберите режим просмотра расписания на следующую неделю:", reply_markup=nextWeekViewKeyboard())
 
-@user_router.message(F.text == "⚙️ Настройки")
-async def cmd_settings(message: Message):
-    await message.answer("Настройки ⚙️")
 
 @user_router.message(F.text == "📝 Домашка")
-async def cmd_homework(message: Message):
-    await message.answer("Домашка 📝")
+async def cmd_homework(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user(session=session, tg_id=message.from_user.id)
+    
+    if not user:
+        await message.answer("Сначала нужно пройти регистрацию. Напиши /start")
+        return
+    
+    # Получаем домашние задания пользователя из базы данных
+    homeworks = await get_user_homeworks(session=session, tg_id=user.tg_id)
+    
+    if not homeworks:
+        await message.answer("У вас пока нет домашних заданий.", reply_markup=homeworkListKeyboard(homeworks))
+    else:
+        await message.answer("Ваши домашние задания:", reply_markup=homeworkListKeyboard(homeworks))
+    
+    await state.set_state(HomeworkManagement.viewing_list)
+    await state.update_data(homeworks=homeworks)
+
+@user_router.message(F.text == "⚙️ Настройки")
+async def cmd_settings(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user(session=session, tg_id=message.from_user.id)
+    
+    if not user:
+        await message.answer("Сначала нужно пройти регистрацию. Напиши /start")
+        return
+    
+    await message.answer("⚙️ Настройки", reply_markup=settingsKeyboard())
+    await state.set_state(SettingsManagement.in_settings)
+
+
+@user_router.message(SettingsManagement.in_settings, F.text == "🔙 Назад")
+async def settings_back(message: Message, state: FSMContext):
+    await message.answer("Главное меню", reply_markup=mainMenuKeyboard())
+    await state.clear()
+
+
+@user_router.message(SettingsManagement.in_settings, F.text == "⏰ Уведомления перед парой")
+async def settings_change_notify_before(message: Message, state: FSMContext):
+    await message.answer("Я могу присылать уведомления о предстоящей паре за несколько минут до неё. Если нужно, укажи за сколько.", reply_markup=notifyBeforeLessonsKeyboard())
+    await state.set_state(SettingsManagement.changing_notify_before)
+
+
+@user_router.callback_query(SettingsManagement.changing_notify_before, F.data.startswith("USERS_TIME_BEFORELESSONS"))
+async def settings_write_users_time(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.answer("Напиши время, за которое тебе надо отправлять уведомление о парах (максимум 3 часа, формат времени ЧЧ:ММ)")
+    await state.set_state(SettingsManagement.changing_notify_before)
+
+
+@user_router.message(SettingsManagement.changing_notify_before)
+async def settings_notify_before_confirm(message: Message, state: FSMContext, session: AsyncSession):
+    result = get_time_notifications_one_session(message.text)
+    if result is None:
+        await message.answer("Время написано некорректно! Напиши время в формате ЧЧ:ММ, не более 3 часов (к примеру 02:21)")
+    else:
+        # get_time_notifications_one_session возвращает секунды → сохраняем минуты
+        minutes = result // 60
+        user = await get_user(session=session, tg_id=message.from_user.id)
+        if user:
+            await update_user_notify_before_min(
+                session=session,
+                tg_id=user.tg_id,
+                notify_before_min=minutes
+            )
+        
+        await message.answer(f"✅ Уведомления перед парой установлены за {minutes} минут", reply_markup=settingsKeyboard())
+        await state.set_state(SettingsManagement.in_settings)
+
+
+@user_router.callback_query(SettingsManagement.changing_notify_before, F.data.startswith("BEFORELESSONS_"))
+async def settings_notify_before_callback(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    await callback.answer()
+    selected_variant = callback.data.replace("BEFORELESSONS_", "", 1)
+    
+    if selected_variant == "DONT_NOTIFY":
+        result = 0
+    else:
+        result = int(selected_variant)
+    
+    user = await get_user(session=session, tg_id=callback.from_user.id)
+    if user:
+        await update_user_notify_before_min(
+            session=session,
+            tg_id=user.tg_id,
+            notify_before_min=result
+        )
+    
+    if result:
+        await callback.message.edit_text(f"✅ Уведомления перед парой установлены за {result} минут", reply_markup=settingsInlineKeyboard())
+    else:
+        await callback.message.edit_text("✅ Уведомления перед парой отключены", reply_markup=settingsInlineKeyboard())
+    
+    await state.set_state(SettingsManagement.in_settings)
+
+
+@user_router.message(SettingsManagement.in_settings, F.text == "📅 Уведомления перед днём")
+async def settings_change_notify_day(message: Message, state: FSMContext):
+    await message.answer("Я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>", parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
+    await state.set_state(SettingsManagement.changing_notify_day)
+
+
+@user_router.message(SettingsManagement.changing_notify_day)
+async def settings_notify_day_confirm(message: Message, state: FSMContext, session: AsyncSession):
+    result = get_time_notifications_all_session(message.text)
+    if result is None and message.text != "Не присылать":
+        await message.answer(text="<b>Время должно быть в формате ЧЧ:ММ!</b> \nДля продолжения введи корректное время или выбери из предложенного", parse_mode="HTML")
+    else:
+        user = await get_user(session=session, tg_id=message.from_user.id)
+        if user:
+            await update_user_notify_time(
+                session=session,
+                tg_id=user.tg_id,
+                notify_time=result
+            )
+        
+        if result is not None:
+            await message.answer(f"✅ Уведомления перед днём установлены на {format_time(result)}", reply_markup=settingsKeyboard())
+        else:
+            await message.answer("✅ Уведомления перед днём отключены", reply_markup=settingsKeyboard())
+        
+        await state.set_state(SettingsManagement.in_settings)
+
+
+@user_router.message(SettingsManagement.in_settings, F.text == "🗑 Сброс аккаунта")
+async def settings_reset_account(message: Message, state: FSMContext):
+    await message.answer("⚠️ Вы уверены, что хотите сбросить аккаунт? <b>Все данные, включая домашние задания, будут удалены!</b>", parse_mode="HTML", reply_markup=applyResetKeyboard())
+    await state.set_state(SettingsManagement.confirming_reset)
+
+
+@user_router.callback_query(SettingsManagement.confirming_reset, F.data == "RESET_YES")
+async def settings_confirm_reset(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    await callback.answer()
+    await delete_user(session=session, tg_id=callback.from_user.id)
+    await callback.message.edit_text(f"Привет, {callback.from_user.full_name}, напиши свою группу!")
+    await state.clear()
+    # Переключаемся на регистрацию
+    from handlers.registration import Registration
+    await state.set_state(Registration.waitingForGroup)
+
+
+@user_router.callback_query(SettingsManagement.confirming_reset, F.data == "RESET_NO")
+async def settings_cancel_reset(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text("⚙️ Настройки", reply_markup=settingsInlineKeyboard())
+    await state.set_state(SettingsManagement.in_settings)
+
+
+@user_router.callback_query(SettingsManagement.in_settings, F.data == "settings_back")
+async def settings_inline_back(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete()
+    await callback.message.answer("Главное меню", reply_markup=mainMenuKeyboard())
+    await state.clear()
+
+
+@user_router.callback_query(SettingsManagement.in_settings, F.data == "settings_notify_before")
+async def settings_inline_notify_before(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text("Я могу присылать уведомления о предстоящей паре за несколько минут до неё. Если нужно, укажи за сколько.", reply_markup=notifyBeforeLessonsKeyboard())
+    await state.set_state(SettingsManagement.changing_notify_before)
+
+
+@user_router.callback_query(SettingsManagement.in_settings, F.data == "settings_notify_day")
+async def settings_inline_notify_day(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text("Я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>", parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
+    await state.set_state(SettingsManagement.changing_notify_day)
+
+
+@user_router.callback_query(SettingsManagement.in_settings, F.data == "settings_reset")
+async def settings_inline_reset(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text("⚠️ Вы уверены, что хотите сбросить аккаунт? <b>Все данные, включая домашние задания, будут удалены!</b>", parse_mode="HTML", reply_markup=applyResetKeyboard())
+    await state.set_state(SettingsManagement.confirming_reset)
+
 
 @user_router.message(F.text == "🙈 Скрыть предметы")
 async def cmd_hide_subject(message: Message, state: FSMContext):
@@ -208,6 +392,20 @@ async def cmd_hide_subject(message: Message, state: FSMContext):
 async def cmd_view_hidden_subjects(message: Message, state: FSMContext):
     await message.answer("Выберите день недели для просмотра скрытых предметов:", reply_markup=viewHiddenSubjectDayKeyboard())
     await state.set_state(ViewHiddenSubjects.selecting_day)
+
+
+@user_router.callback_query(HideSubject.selecting_day, F.data == "back_to_main_menu")
+async def back_to_main_menu_from_hide(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
+    await callback.answer()
+
+
+@user_router.callback_query(ViewHiddenSubjects.selecting_day, F.data == "back_to_main_menu")
+async def back_to_main_menu_from_view(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
+    await callback.answer()
 
 
 @user_router.callback_query(HideSubject.selecting_day, F.data.startswith("hide_day_"))
@@ -224,7 +422,7 @@ async def hide_day_selected(callback: CallbackQuery, session: AsyncSession, stat
     # Сохраняем выбранный день
     days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
     selected_day = days_of_week[day_index]
-    await state.update_data(selected_day=selected_day)
+    await state.update_data(selected_day=selected_day, day_index=day_index)
     await state.set_state(HideSubject.selecting_subject)
     
     # Получаем расписание на выбранный день
@@ -236,12 +434,23 @@ async def hide_day_selected(callback: CallbackQuery, session: AsyncSession, stat
     )
     
     if not schedule:
-        await callback.message.edit_text(f"На {selected_day} нет пар.")
-        await state.clear()
+        # Создаём клавиатуру навигации по дням
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        nav_keyboard = InlineKeyboardBuilder()
+        
+        # Кнопки навигации
+        prev_day_index = (day_index - 1) % 7
+        next_day_index = (day_index + 1) % 7
+        nav_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hide_day_{prev_day_index}")
+        nav_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hide_day_{next_day_index}")
+        nav_keyboard.button(text="🔙 В меню", callback_data="back_to_hide_menu")
+        nav_keyboard.adjust(2, 1)
+        
+        await callback.message.edit_text(f"На {selected_day} нет пар.", reply_markup=nav_keyboard.as_markup())
         await callback.answer()
         return
     
-    # Создаём клавиатуру с предметами
+    # Создаём клавиатуру с предметами и навигацией
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     subject_keyboard = InlineKeyboardBuilder()
     
@@ -257,7 +466,13 @@ async def hide_day_selected(callback: CallbackQuery, session: AsyncSession, stat
     for idx, subject in enumerate(subjects_list):
         subject_keyboard.button(text=subject, callback_data=f"hide_subj_{idx}")
     
-    subject_keyboard.adjust(1)
+    # Кнопки навигации
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    subject_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hide_day_{prev_day_index}")
+    subject_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hide_day_{next_day_index}")
+    subject_keyboard.button(text="🔙 В меню", callback_data="back_to_hide_menu")
+    subject_keyboard.adjust(1, 2, 1)
     
     await callback.message.edit_text(f"Выберите предмет для скрытия на {selected_day}:", reply_markup=subject_keyboard.as_markup())
     await callback.answer()
@@ -294,6 +509,83 @@ async def hide_subject_selected(callback: CallbackQuery, session: AsyncSession, 
     await callback.answer()
 
 
+@user_router.callback_query(HideSubject.selecting_subject, F.data == "back_to_hide_menu")
+async def back_to_hide_menu_callback(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("Выберите день недели, на котором хотите скрыть предмет:", reply_markup=hideSubjectDayKeyboard())
+    await state.set_state(HideSubject.selecting_day)
+    await callback.answer()
+
+
+@user_router.callback_query(HideSubject.selecting_subject, F.data.startswith("nav_hide_day_"))
+async def nav_hide_day_callback(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    user = await get_user(session=session, tg_id=callback.from_user.id)
+    
+    if not user:
+        await callback.answer("Сначала нужно пройти регистрацию")
+        return
+    
+    # Получаем индекс дня из callback_data
+    day_index = int(callback.data.replace("nav_hide_day_", "", 1))
+    
+    # Сохраняем выбранный день
+    days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    selected_day = days_of_week[day_index]
+    await state.update_data(selected_day=selected_day, day_index=day_index)
+    
+    # Получаем расписание на выбранный день
+    schedule = await get_schedule(
+        session=session,
+        group_id=user.group_id,
+        week="all",
+        weekday=selected_day
+    )
+    
+    if not schedule:
+        # Создаём клавиатуру навигации по дням
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        nav_keyboard = InlineKeyboardBuilder()
+        
+        # Кнопки навигации
+        prev_day_index = (day_index - 1) % 7
+        next_day_index = (day_index + 1) % 7
+        nav_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hide_day_{prev_day_index}")
+        nav_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hide_day_{next_day_index}")
+        nav_keyboard.button(text="🔙 В меню", callback_data="back_to_hide_menu")
+        nav_keyboard.adjust(2, 1)
+        
+        await callback.message.edit_text(f"На {selected_day} нет пар.", reply_markup=nav_keyboard.as_markup())
+        await callback.answer()
+        return
+    
+    # Создаём клавиатуру с предметами и навигацией
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    subject_keyboard = InlineKeyboardBuilder()
+    
+    # Получаем уникальные предметы и сохраняем их в состоянии
+    subjects = set()
+    for lesson in schedule:
+        subjects.add(lesson.subject)
+    
+    subjects_list = sorted(subjects)
+    await state.update_data(subjects=subjects_list)
+    
+    # Используем индексы вместо полных названий для callback data
+    for idx, subject in enumerate(subjects_list):
+        subject_keyboard.button(text=subject, callback_data=f"hide_subj_{idx}")
+    
+    # Кнопки навигации
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    subject_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hide_day_{prev_day_index}")
+    subject_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hide_day_{next_day_index}")
+    subject_keyboard.button(text="🔙 В меню", callback_data="back_to_hide_menu")
+    subject_keyboard.adjust(1, 2, 1)
+    
+    await callback.message.edit_text(f"Выберите предмет для скрытия на {selected_day}:", reply_markup=subject_keyboard.as_markup())
+    await callback.answer()
+
+
 @user_router.callback_query(ViewHiddenSubjects.selecting_day, F.data.startswith("view_hidden_day_"))
 async def view_hidden_day_selected(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     user = await get_user(session=session, tg_id=callback.from_user.id)
@@ -308,19 +600,30 @@ async def view_hidden_day_selected(callback: CallbackQuery, session: AsyncSessio
     # Сохраняем выбранный день
     days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
     selected_day = days_of_week[day_index]
-    await state.update_data(selected_day=selected_day)
+    await state.update_data(selected_day=selected_day, day_index=day_index)
     await state.set_state(ViewHiddenSubjects.viewing_subjects)
     
     # Получаем скрытые предметы для этого дня
     hidden_subjects = await get_hidden_subjects_by_day(session=session, tg_id=user.tg_id, weekday=selected_day)
     
     if not hidden_subjects:
-        await callback.message.edit_text(f"На {selected_day} нет скрытых предметов.")
-        await state.clear()
+        # Создаём клавиатуру навигации по дням
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        nav_keyboard = InlineKeyboardBuilder()
+        
+        # Кнопки навигации
+        prev_day_index = (day_index - 1) % 7
+        next_day_index = (day_index + 1) % 7
+        nav_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"view_hidden_day_{prev_day_index}")
+        nav_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"view_hidden_day_{next_day_index}")
+        nav_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+        nav_keyboard.adjust(2, 1)
+        
+        await callback.message.edit_text(f"На {selected_day} нет скрытых предметов.", reply_markup=nav_keyboard.as_markup())
         await callback.answer()
         return
     
-    # Создаём клавиатуру с предметами
+    # Создаём клавиатуру с предметами и навигацией
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     subject_keyboard = InlineKeyboardBuilder()
     
@@ -331,7 +634,13 @@ async def view_hidden_day_selected(callback: CallbackQuery, session: AsyncSessio
     for idx, subject in enumerate(hidden_subjects):
         subject_keyboard.button(text=subject, callback_data=f"view_subj_{idx}")
     
-    subject_keyboard.adjust(1)
+    # Кнопки навигации
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    subject_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"view_hidden_day_{prev_day_index}")
+    subject_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"view_hidden_day_{next_day_index}")
+    subject_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+    subject_keyboard.adjust(1, 2, 1)
     
     await callback.message.edit_text(f"Скрытые предметы на {selected_day}:", reply_markup=subject_keyboard.as_markup())
     await callback.answer()
@@ -424,35 +733,315 @@ async def back_to_hidden_callback(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     hidden_subjects = data.get("hidden_subjects", [])
     selected_day = data.get("selected_day")
+    day_index = data.get("day_index", 0)
     
     if not hidden_subjects:
-        await callback.message.edit_text(f"На {selected_day} нет скрытых предметов.")
-        await state.clear()
+        # Создаём клавиатуру навигации по дням
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        nav_keyboard = InlineKeyboardBuilder()
+        
+        days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+        prev_day_index = (day_index - 1) % 7
+        next_day_index = (day_index + 1) % 7
+        nav_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hidden_day_{prev_day_index}")
+        nav_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hidden_day_{next_day_index}")
+        nav_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+        nav_keyboard.adjust(2, 1)
+        
+        await callback.message.edit_text(f"На {selected_day} нет скрытых предметов.", reply_markup=nav_keyboard.as_markup())
         await callback.answer()
         return
     
-    # Создаём клавиатуру с предметами
+    # Создаём клавиатуру с предметами и навигацией
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     subject_keyboard = InlineKeyboardBuilder()
+    
+    days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
     
     for idx, subject in enumerate(hidden_subjects):
         subject_keyboard.button(text=subject, callback_data=f"view_subj_{idx}")
     
-    subject_keyboard.adjust(1)
+    # Кнопки навигации
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    subject_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hidden_day_{prev_day_index}")
+    subject_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hidden_day_{next_day_index}")
+    subject_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+    subject_keyboard.adjust(1, 2, 1)
     
     await callback.message.edit_text(f"Скрытые предметы на {selected_day}:", reply_markup=subject_keyboard.as_markup())
+    await callback.answer()
+
+
+@user_router.callback_query(ViewHiddenSubjects.viewing_subjects, F.data.startswith("nav_hidden_day_"))
+async def nav_hidden_day_callback(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    user = await get_user(session=session, tg_id=callback.from_user.id)
+    
+    if not user:
+        await callback.answer("Сначала нужно пройти регистрацию")
+        return
+    
+    # Получаем индекс дня из callback_data
+    day_index = int(callback.data.replace("nav_hidden_day_", "", 1))
+    
+    # Сохраняем выбранный день
+    days_of_week = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    selected_day = days_of_week[day_index]
+    await state.update_data(selected_day=selected_day, day_index=day_index)
+    
+    # Получаем скрытые предметы для этого дня
+    hidden_subjects = await get_hidden_subjects_by_day(session=session, tg_id=user.tg_id, weekday=selected_day)
+    
+    if not hidden_subjects:
+        # Создаём клавиатуру навигации по дням
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        nav_keyboard = InlineKeyboardBuilder()
+        
+        # Кнопки навигации
+        prev_day_index = (day_index - 1) % 7
+        next_day_index = (day_index + 1) % 7
+        nav_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hidden_day_{prev_day_index}")
+        nav_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hidden_day_{next_day_index}")
+        nav_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+        nav_keyboard.adjust(2, 1)
+        
+        await callback.message.edit_text(f"На {selected_day} нет скрытых предметов.", reply_markup=nav_keyboard.as_markup())
+        await callback.answer()
+        return
+    
+    # Создаём клавиатуру с предметами и навигацией
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    subject_keyboard = InlineKeyboardBuilder()
+    
+    # Сохраняем список предметов в состоянии
+    await state.update_data(hidden_subjects=hidden_subjects)
+    
+    # Используем индексы для callback data
+    for idx, subject in enumerate(hidden_subjects):
+        subject_keyboard.button(text=subject, callback_data=f"view_subj_{idx}")
+    
+    # Кнопки навигации
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    subject_keyboard.button(text=f"◀ {days_of_week[prev_day_index].capitalize()}", callback_data=f"nav_hidden_day_{prev_day_index}")
+    subject_keyboard.button(text=f"{days_of_week[next_day_index].capitalize()} ▶", callback_data=f"nav_hidden_day_{next_day_index}")
+    subject_keyboard.button(text="🔙 В меню", callback_data="back_to_hidden_menu")
+    subject_keyboard.adjust(1, 2, 1)
+    
+    await callback.message.edit_text(f"Скрытые предметы на {selected_day}:", reply_markup=subject_keyboard.as_markup())
+    await callback.answer()
+
+
+@user_router.callback_query(HomeworkManagement.viewing_list, F.data == "homework_add")
+async def homework_add_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Введите название домашки:", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_name)
+    await callback.answer()
+
+
+@user_router.message(HomeworkManagement.adding_name)
+async def homework_add_name(message: Message, state: FSMContext):
+    await state.update_data(homework_name=message.text)
+    await message.answer("Введите описание домашки (или пропустите, отправив /skip):", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_description)
+
+
+@user_router.message(HomeworkManagement.adding_description, F.text == "/skip")
+async def homework_skip_description(message: Message, state: FSMContext):
+    await state.update_data(homework_description=None)
+    await message.answer("Прикрепите файл с домашкой (или пропустите, отправив /skip):", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_file)
+
+
+@user_router.message(HomeworkManagement.adding_description)
+async def homework_add_description(message: Message, state: FSMContext):
+    await state.update_data(homework_description=message.text)
+    await message.answer("Прикрепите файл с домашкой (или пропустите, отправив /skip):", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_file)
+
+
+@user_router.message(HomeworkManagement.adding_file, F.text == "/skip")
+async def homework_skip_file(message: Message, state: FSMContext):
+    await state.update_data(homework_file_id=None)
+    await message.answer("Укажите когда напомнить о домашке в формате ДД.ММ.ГГГГ ЧЧ:ММ (или пропустите, отправив /skip):", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_remind_time)
+
+
+@user_router.message(HomeworkManagement.adding_file, F.document)
+async def homework_add_file(message: Message, state: FSMContext):
+    await state.update_data(homework_file_id=message.document.file_id)
+    await message.answer("Укажите когда напомнить о домашке в формате ДД.ММ.ГГГГ ЧЧ:ММ (или пропустите, отправив /skip):", reply_markup=homeworkAddKeyboard())
+    await state.set_state(HomeworkManagement.adding_remind_time)
+
+
+@user_router.message(HomeworkManagement.adding_remind_time, F.text == "/skip")
+async def homework_skip_remind_time(message: Message, state: FSMContext, session: AsyncSession):
+    await state.update_data(homework_remind_time=None)
+    data = await state.get_data()
+    
+    user = await get_user(session=session, tg_id=message.from_user.id)
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
+    try:
+        await add_homework(
+            session=session,
+            tg_id=user.tg_id,
+            name=data.get("homework_name"),
+            description=data.get("homework_description"),
+            file_id=data.get("homework_file_id"),
+            remind_time=None
+        )
+        await message.answer("✅ Домашка добавлена!")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при добавлении домашки: {e}")
+    
+    await state.clear()
+
+
+@user_router.message(HomeworkManagement.adding_remind_time)
+async def homework_add_remind_time(message: Message, state: FSMContext, session: AsyncSession):
+    try:
+        remind_datetime = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
+        remind_timestamp = int(remind_datetime.timestamp())
+    except ValueError:
+        await message.answer("Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ (например: 25.12.2026 14:30)")
+        return
+    
+    await state.update_data(homework_remind_time=remind_timestamp)
+    data = await state.get_data()
+    
+    user = await get_user(session=session, tg_id=message.from_user.id)
+    if not user:
+        await message.answer("Ошибка: пользователь не найден")
+        await state.clear()
+        return
+    
+    try:
+        await add_homework(
+            session=session,
+            tg_id=user.tg_id,
+            name=data.get("homework_name"),
+            description=data.get("homework_description"),
+            file_id=data.get("homework_file_id"),
+            remind_time=remind_timestamp
+        )
+        await message.answer("✅ Домашка добавлена!")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при добавлении домашки: {e}")
+    
+    await state.clear()
+
+
+@user_router.callback_query(HomeworkManagement.viewing_list, F.data.startswith("homework_view_"))
+async def homework_view(callback: CallbackQuery, state: FSMContext):
+    homework_idx = int(callback.data.replace("homework_view_", "", 1))
+    data = await state.get_data()
+    homeworks = data.get("homeworks", [])
+    
+    if homework_idx >= len(homeworks):
+        await callback.answer("Ошибка: домашка не найдена")
+        return
+    
+    homework = homeworks[homework_idx]
+    
+    # Формируем сообщение с информацией о домашке
+    response = f"📝 {homework.name}\n\n"
+    
+    if homework.description:
+        response += f"📄 Описание:\n{homework.description}\n\n"
+    
+    if homework.remind_time:
+        remind_datetime = datetime.fromtimestamp(homework.remind_time)
+        response += f"⏰ Напомнить: {remind_datetime.strftime('%d.%m.%Y %H:%M')}\n\n"
+    
+    if homework.file_id:
+        response += "📎 Файл прикреплён"
+        # Отправляем файл
+        await callback.message.answer_document(homework.file_id, caption=response, reply_markup=homeworkViewKeyboard(homework_idx))
+        await callback.message.delete()
+    else:
+        response += "📎 Файл не прикреплён"
+        await callback.message.edit_text(response, reply_markup=homeworkViewKeyboard(homework_idx))
+    
+    await callback.answer()
+
+
+@user_router.callback_query(F.data.startswith("homework_delete_"))
+async def homework_delete(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    homework_idx = int(callback.data.replace("homework_delete_", "", 1))
+    data = await state.get_data()
+    homeworks = data.get("homeworks", [])
+    
+    if homework_idx >= len(homeworks):
+        await callback.answer("Ошибка: домашка не найдена")
+        return
+    
+    homework = homeworks[homework_idx]
+    await delete_homework(session=session, homework_id=homework.id)
+    
+    # Обновляем список
+    user = await get_user(session=session, tg_id=callback.from_user.id)
+    if user:
+        homeworks = await get_user_homeworks(session=session, tg_id=user.tg_id)
+        await state.update_data(homeworks=homeworks)
+    
+    # Удаляем сообщение (оно может быть с файлом) и отправляем новое
+    await callback.message.delete()
+    
+    if not homeworks:
+        msg = await callback.message.answer("У вас пока нет домашних заданий.", reply_markup=homeworkListKeyboard(homeworks))
+    else:
+        msg = await callback.message.answer("Ваши домашние задания:", reply_markup=homeworkListKeyboard(homeworks))
+    
+    await callback.answer("✅ Домашка удалена")
+
+
+@user_router.callback_query(F.data == "homework_back_to_list")
+async def homework_back_to_list(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    homeworks = data.get("homeworks", [])
+    
+    # Удаляем сообщение (оно может быть с файлом) и отправляем новое
+    await callback.message.delete()
+    
+    if not homeworks:
+        msg = await callback.message.answer("У вас пока нет домашних заданий.", reply_markup=homeworkListKeyboard(homeworks))
+    else:
+        msg = await callback.message.answer("Ваши домашние задания:", reply_markup=homeworkListKeyboard(homeworks))
+    
+    await state.set_state(HomeworkManagement.viewing_list)
+    await callback.answer()
+
+
+@user_router.callback_query(F.data == "homework_cancel")
+async def homework_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
+    await callback.answer()
+
+
+@user_router.callback_query(HomeworkManagement.viewing_list, F.data == "back_to_main_menu")
+async def homework_back_to_main_menu(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
     await callback.answer()
 
 @user_router.message(F.text == "ℹ️ Помощь")
 async def cmd_help(message: Message):
     await message.answer(
         "ℹ️ *Помощь*\n\n"
-        "📅 *Сегодня* - расписание на текущий день\n"
-        "📆 *Завтра* - расписание на завтра\n"
-        "🗓 *Эта неделя* - расписание на текущую неделю\n"
-        "📋 *След. неделя* - расписание на следующую неделю\n"
-        "⚙️ *Настройки* - настройка уведомлений и группы\n"
-        "ℹ️ *Помощь* - это сообщение",
+        "📅 *Сегодня* — расписание на текущий день\n"
+        "📆 *Завтра* — расписание на завтра\n"
+        "🗓 *Эта неделя* — расписание на текущую неделю\n"
+        "📋 *След. неделя* — расписание на следующую неделю\n"
+        "📝 *Домашка* — список, добавление и удаление домашних заданий\n"
+        "🙈 *Скрыть предметы* — скрыть предметы из расписания\n"
+        "👁️ *Скрытые предметы* — просмотр и возврат скрытых предметов\n"
+        "⚙️ *Настройки* — уведомления перед парой / днём и сброс аккаунта\n"
+        "ℹ️ *Помощь* — это сообщение",
         parse_mode="Markdown"
     )
 
@@ -501,7 +1090,8 @@ async def navigate_day(callback: CallbackQuery, session: AsyncSession, state: FS
                     "time": time_str,
                     "subject": lesson.subject,
                     "room": lesson.room,
-                    "teacher": lesson.teacher
+                    "teacher": lesson.teacher,
+                    "lesson_type": lesson.lesson_type
                 })
         
         # Генерируем картинку
@@ -534,7 +1124,10 @@ async def navigate_day(callback: CallbackQuery, session: AsyncSession, state: FS
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
                 response += f"   🕐 {time_str}\n"
                 response += f"   👨‍🏫 {lesson.teacher}\n"
                 response += f"   🏢 {lesson.room}\n\n"
@@ -588,7 +1181,8 @@ async def toggle_to_image(callback: CallbackQuery, session: AsyncSession, state:
                 "time": time_str,
                 "subject": lesson.subject,
                 "room": lesson.room,
-                "teacher": lesson.teacher
+                "teacher": lesson.teacher,
+                "lesson_type": lesson.lesson_type
             })
     
     # Генерируем картинку
@@ -650,7 +1244,10 @@ async def toggle_to_text(callback: CallbackQuery, session: AsyncSession, state: 
             # Индикатор типа недели для конкретной пары
             lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
             
-            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+            # Тип занятия
+            lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+            
+            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
             response += f"   🕐 {time_str}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n"
             response += f"   🏢 {lesson.room}\n\n"
@@ -718,7 +1315,10 @@ async def select_day(callback: CallbackQuery, session: AsyncSession, state: FSMC
             # Индикатор типа недели для конкретной пары
             lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
             
-            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+            # Тип занятия
+            lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+            
+            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
             response += f"   🕐 {time_str}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n"
             response += f"   🏢 {lesson.room}\n\n"
@@ -772,7 +1372,10 @@ async def week_show_all(callback: CallbackQuery, session: AsyncSession, state: F
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject} ({time_str})\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display} ({time_str})\n"
             response += "\n"
     
     # Редактируем сообщение на текст с кнопкой переключения
@@ -835,7 +1438,10 @@ async def select_next_day(callback: CallbackQuery, session: AsyncSession, state:
             # Индикатор типа недели для конкретной пары
             lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
             
-            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+            # Тип занятия
+            lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+            
+            response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
             response += f"   🕐 {time_str}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n"
             response += f"   🏢 {lesson.room}\n\n"
@@ -890,7 +1496,10 @@ async def next_week_show_all(callback: CallbackQuery, session: AsyncSession, sta
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject} ({time_str})\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display} ({time_str})\n"
             response += "\n"
     
     # Редактируем сообщение на текст с кнопкой переключения
@@ -945,7 +1554,8 @@ async def week_toggle_image(callback: CallbackQuery, session: AsyncSession, stat
                     "time": time_str,
                     "subject": lesson.subject,
                     "room": lesson.room,
-                    "teacher": lesson.teacher
+                    "teacher": lesson.teacher,
+                    "lesson_type": lesson.lesson_type
                 })
             
             week_schedule[day_name] = schedule_list
@@ -1010,7 +1620,10 @@ async def week_toggle_text(callback: CallbackQuery, session: AsyncSession, state
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject} ({time_str})\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display} ({time_str})\n"
             response += "\n"
     
     # Удаляем сообщение с картинкой и отправляем новое текстовое
@@ -1066,7 +1679,8 @@ async def next_week_toggle_image(callback: CallbackQuery, session: AsyncSession,
                     "time": time_str,
                     "subject": lesson.subject,
                     "room": lesson.room,
-                    "teacher": lesson.teacher
+                    "teacher": lesson.teacher,
+                    "lesson_type": lesson.lesson_type
                 })
             
             week_schedule[day_name] = schedule_list
@@ -1131,7 +1745,10 @@ async def next_week_toggle_text(callback: CallbackQuery, session: AsyncSession, 
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject} ({time_str})\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"  {lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display} ({time_str})\n"
             response += "\n"
     
     # Удаляем сообщение с картинкой и отправляем новое текстовое
@@ -1150,6 +1767,15 @@ async def change_week_type(callback: CallbackQuery, session: AsyncSession, state
     
     # Получаем новый тип недели из callback_data
     new_week_type = callback.data.replace("week_", "", 1)
+    
+    # Получаем текущий тип недели из состояния
+    data = await state.get_data()
+    current_week_type = data.get("week_type", "all")
+    
+    # Если тип недели не изменился, просто отвечаем
+    if new_week_type == current_week_type:
+        await callback.answer("Расписание уже отображается")
+        return
     
     # Обновляем состояние
     await state.update_data(week_type=new_week_type)
@@ -1184,7 +1810,8 @@ async def change_week_type(callback: CallbackQuery, session: AsyncSession, state
                     "time": time_str,
                     "subject": lesson.subject,
                     "room": lesson.room,
-                    "teacher": lesson.teacher
+                    "teacher": lesson.teacher,
+                    "lesson_type": lesson.lesson_type
                 })
         
         # Генерируем картинку
@@ -1194,10 +1821,17 @@ async def change_week_type(callback: CallbackQuery, session: AsyncSession, state
         media_photo = InputMediaPhoto(media=photo_file, caption=f"📅 Расписание на {current_day.capitalize()} ({week_text})")
         
         # Редактируем сообщение с новой картинкой
-        await callback.message.edit_media(
-            media=media_photo,
-            reply_markup=dayNavigationKeyboard(day_index, show_image=True, week_type=new_week_type)
-        )
+        try:
+            await callback.message.edit_media(
+                media=media_photo,
+                reply_markup=dayNavigationKeyboard(day_index, show_image=True, week_type=new_week_type)
+            )
+        except:
+            # Если расписание не изменилось, просто обновляем клавиатуру
+            await callback.message.edit_reply_markup(
+                reply_markup=dayNavigationKeyboard(day_index, show_image=True, week_type=new_week_type)
+            )
+        await callback.answer()
     else:
         # Режим текста
         if not schedule:
@@ -1217,7 +1851,10 @@ async def change_week_type(callback: CallbackQuery, session: AsyncSession, state
                 # Индикатор типа недели для конкретной пары
                 lesson_indicator = "🟥" if lesson.week == "up" else "🟦" if lesson.week == "down" else "⬜"
                 
-                response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}\n"
+                # Тип занятия
+                lesson_type_display = f" [{lesson.lesson_type}]" if lesson.lesson_type else ""
+                
+                response += f"{lesson_indicator} {lesson.class_num}. {lesson.subject}{lesson_type_display}\n"
                 response += f"   🕐 {time_str}\n"
                 response += f"   👨‍🏫 {lesson.teacher}\n"
                 response += f"   🏢 {lesson.room}\n\n"

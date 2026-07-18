@@ -7,3 +7,9 @@ def getToken() -> str:
     return os.getenv("TOKEN")
 
 
+def getDatabaseUrl() -> str:
+    load_dotenv()
+    
+    return os.getenv("DATABASE_URL")
+
+

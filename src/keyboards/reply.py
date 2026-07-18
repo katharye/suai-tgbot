@@ -27,3 +27,14 @@ def mainMenuKeyboard() -> ReplyKeyboardMarkup:
     
     mainMenu.adjust(2, 2, 2, 2)
     return mainMenu.as_markup(resize_keyboard=True, is_persistent=False)
+
+
+def settingsKeyboard() -> ReplyKeyboardMarkup:
+    settingsMenu = ReplyKeyboardBuilder()
+    settingsMenu.button(text="⏰ Уведомления перед парой")
+    settingsMenu.button(text="📅 Уведомления перед днём")
+    settingsMenu.button(text="🗑 Сброс аккаунта")
+    settingsMenu.button(text="🔙 Назад")
+    
+    settingsMenu.adjust(2, 2)
+    return settingsMenu.as_markup(resize_keyboard=True, is_persistent=False)

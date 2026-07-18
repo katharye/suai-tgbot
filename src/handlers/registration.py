@@ -14,6 +14,15 @@ from services.get_time import get_time_notifications_all_session, get_time_notif
 
 registration_router = Router()
 
+
+def format_time(seconds: int | None) -> str:
+    """Форматирует секунды в формат ЧЧ:ММ."""
+    if seconds is None:
+        return "Не указано"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    return f"{hours:02d}:{minutes:02d}"
+
 class Registration(StatesGroup):
     waitingResetConfirm    = State()   # Ожидание подтверждения ресета 
     waitingForGroup        = State()   # Ожидание ввода группы
@@ -101,12 +110,13 @@ async def writeUsersTime(callback: CallbackQuery, state: FSMContext):
 @registration_router.message(Registration.waitingWriteTimeNotify)
 async def usersNotifyBeforeLessonConfirm(message: Message, state: FSMContext):
     result = get_time_notifications_one_session(message.text)
-    if not result: 
+    if result is None: 
         await message.answer("Время написано некорректно! Напиши время в формате ЧЧ:ММ, не более 3 часов (к примеру 02:21)")
     else:
         await message.answer("Ещё я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>",
                                      parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
-        await state.update_data(notifyBeforeLessons=result)
+        # get_time_notifications_one_session возвращает секунды → сохраняем минуты
+        await state.update_data(notifyBeforeLessons=result // 60)
         await state.set_state(Registration.waitingAllDayNotyfy)
 
 
@@ -116,9 +126,9 @@ async def notifyBeforeLessonsConfirm(callback: CallbackQuery, state: FSMContext)
     await callback.answer()
     selected_variant = callback.data.replace("BEFORELESSONS_", "", 1)
     if selected_variant == "DONT_NOTIFY":
-        await state.update_data(notifyBeforeLessons=None)
+        await state.update_data(notifyBeforeLessons=0)
     else:
-        await state.update_data(notifyBeforeLessons=(int(selected_variant) * 60))
+        await state.update_data(notifyBeforeLessons=int(selected_variant))
     
     await callback.message.answer("Ещё я могу присылать уведомления о целом дне в указанное тобой время. Если нужно, укажи за сколько. Так же ты можешь указать своё время в формате <b>ЧЧ:ММ</b>",
                                      parse_mode="HTML", reply_markup=notifyBeforeAllLessonsKeyboard())
@@ -127,7 +137,7 @@ async def notifyBeforeLessonsConfirm(callback: CallbackQuery, state: FSMContext)
 @registration_router.message(Registration.waitingAllDayNotyfy)
 async def notifyBeforeAllLessonsConfirm(message: Message, state: FSMContext, session: AsyncSession):
     result = get_time_notifications_all_session(message.text)
-    if not result and message.text != "Не присылать":
+    if result is None and message.text != "Не присылать":
         await message.answer(text="<b>Время должно быть в формате ЧЧ:ММ!</b> \nДля продолжения введи корректное время или выбери из предложенного", parse_mode="HTML")
     else:
         await state.update_data(timeAllNotify=result)
@@ -147,14 +157,21 @@ async def notifyBeforeAllLessonsConfirm(message: Message, state: FSMContext, ses
             notify_time=data.get("timeAllNotify")
         )
         
-        # Обновляем время уведомления перед парой (в минутах)
+        # Обновляем время уведомления перед парой (в минутах; 0 = отключено)
+        before = data.get("notifyBeforeLessons")
         await update_user_notify_before_min(
             session=session,
             tg_id=data.get("tgId"),
-            notify_before_min=data.get("notifyBeforeLessons") or 15
+            notify_before_min=15 if before is None else before
         )
         
-        await message.answer(f"<b>Регистрация окончена!</b>\nГруппа: {data.get("groupName")}\nВремя уведомлений перед парой: {data.get("notifyBeforeLessons") if data.get("notifyBeforeLessons") else "Не присылать"}\nВремя уведомлений перед учебным днём: {data.get("timeAllNotify") if data.get("timeAllNotify") else "Не присылать"}",
-                             parse_mode="HTML",
-                             reply_markup=mainMenuKeyboard())
+        before_text = "Не присылать" if not before else f"{before} минут"
+        day_text = format_time(data.get("timeAllNotify")) if data.get("timeAllNotify") is not None else "Не присылать"
+        await message.answer(
+            f"<b>Регистрация окончена!</b>\nГруппа: {data.get('groupName')}\n"
+            f"Время уведомлений перед парой: {before_text}\n"
+            f"Время уведомлений перед учебным днём: {day_text}",
+            parse_mode="HTML",
+            reply_markup=mainMenuKeyboard(),
+        )
         await state.clear()

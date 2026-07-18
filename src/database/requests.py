@@ -96,37 +96,9 @@ async def find_groups(session: AsyncSession, name: str) -> list[Group]:
 
 
 #  Домашки
-async def add_homework(session: AsyncSession, tg_id: int, name: str, file_id: str) -> Homework:
-    """Сохранить домашку пользователя."""
-    homework = Homework(tg_user_id=tg_id, name=name, file_id=file_id)
-    session.add(homework)
-    await session.commit()
-
-    return homework
-
-
-async def get_user_homeworks(session: AsyncSession, tg_id: int) -> list[Homework]:
-    """Вернуть список всех домашек пользователя."""
-    stmt = select(Homework).where(Homework.tg_user_id == tg_id)
-    result = await session.execute(stmt)
-    homeworks = list(result.scalars().all())
-
-    return homeworks
-
-
 async def get_homework(session: AsyncSession, homework_id: int) -> Homework | None:
     """Достать одну домашку по её id."""
     return await session.get(Homework, homework_id)
-
-
-async def delete_homework(session: AsyncSession, homework_id: int) -> None:
-    """Удалить домашку по её id.
-    Если домашки нет — ничего не делает (без ошибки).
-    """
-    homework = await session.get(Homework, homework_id)
-    if homework is not None:
-        await session.delete(homework)
-        await session.commit()
 
 
 #  Расписание
@@ -192,7 +164,8 @@ async def create_lesson(
     start_time: int,
     teacher: str,
     room: str,
-    lesson_hash: str
+    lesson_hash: str,
+    lesson_type: str | None = None
 ) -> Schedule:
     """Создать запись о паре в расписании."""
     lesson = Schedule(
@@ -204,7 +177,8 @@ async def create_lesson(
         start_time=start_time,
         teacher=teacher,
         room=room,
-        hash=lesson_hash
+        hash=lesson_hash,
+        lesson_type=lesson_type
     )
     session.add(lesson)
     await session.commit()
@@ -395,4 +369,74 @@ async def remove_hidden_subject(session: AsyncSession, tg_id: int, subject: str,
 
     if existing is not None:
         await session.delete(existing)
+        await session.commit()
+
+
+# Домашние задания
+async def add_homework(session: AsyncSession, tg_id: int, name: str, description: str = None, file_id: str = None, remind_time: int = None) -> Homework:
+    """Добавить домашнее задание."""
+    from database.models import Homework
+    
+    homework = Homework(
+        tg_user_id=tg_id,
+        name=name,
+        description=description,
+        file_id=file_id,
+        remind_time=remind_time
+    )
+    session.add(homework)
+    await session.commit()
+    await session.refresh(homework)
+    
+    return homework
+
+
+async def get_user_homeworks(session: AsyncSession, tg_id: int) -> list[Homework]:
+    """Получить все домашние задания пользователя."""
+    from database.models import Homework
+    from sqlalchemy import select
+    
+    stmt = select(Homework).where(Homework.tg_user_id == tg_id).order_by(Homework.id)
+    result = await session.execute(stmt)
+    homeworks = list(result.scalars().all())
+    
+    return homeworks
+
+
+async def delete_homework(session: AsyncSession, homework_id: int) -> None:
+    """Удалить домашнее задание."""
+    from database.models import Homework
+    from sqlalchemy import select
+    
+    stmt = select(Homework).where(Homework.id == homework_id)
+    result = await session.execute(stmt)
+    homework = result.scalar_one_or_none()
+    
+    if homework is not None:
+        await session.delete(homework)
+        await session.commit()
+
+async def get_due_homework_reminders(session: AsyncSession, now) -> list[Homework]:
+    """Домашки с наступившим remind_time (включая просроченные за последние 24 часа)."""
+    from sqlalchemy import and_
+
+    minute_end = int(now.replace(second=0, microsecond=0).timestamp()) + 59
+    oldest = minute_end - 24 * 3600
+
+    stmt = select(Homework).where(
+        and_(
+            Homework.remind_time.is_not(None),
+            Homework.remind_time >= oldest,
+            Homework.remind_time <= minute_end,
+        )
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def clear_homework_remind_time(session: AsyncSession, homework_id: int) -> None:
+    """Сбросить время напоминания после отправки."""
+    homework = await session.get(Homework, homework_id)
+    if homework is not None:
+        homework.remind_time = None
         await session.commit()

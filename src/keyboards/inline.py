@@ -174,7 +174,8 @@ def hideSubjectDayKeyboard() -> InlineKeyboardMarkup:
     for i, day in enumerate(days):
         dayKeyboard.button(text=day, callback_data=f"hide_day_{i}")
     
-    dayKeyboard.adjust(2, 2, 2, 1)
+    dayKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
+    dayKeyboard.adjust(2, 2, 2, 1, 1)
     return dayKeyboard.as_markup()
 
 
@@ -186,5 +187,46 @@ def viewHiddenSubjectDayKeyboard() -> InlineKeyboardMarkup:
     for i, day in enumerate(days):
         dayKeyboard.button(text=day, callback_data=f"view_hidden_day_{i}")
     
-    dayKeyboard.adjust(2, 2, 2, 1)
+    dayKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
+    dayKeyboard.adjust(2, 2, 2, 1, 1)
     return dayKeyboard.as_markup()
+
+
+def homeworkListKeyboard(homeworks: list) -> InlineKeyboardMarkup:
+    """Клавиатура для списка домашних заданий."""
+    homeworkKeyboard = InlineKeyboardBuilder()
+    
+    for idx, homework in enumerate(homeworks):
+        homeworkKeyboard.button(text=homework.name, callback_data=f"homework_view_{idx}")
+    
+    homeworkKeyboard.button(text="➕ Добавить домашку", callback_data="homework_add")
+    homeworkKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
+    homeworkKeyboard.adjust(1, 1, 1)
+    return homeworkKeyboard.as_markup()
+
+
+def homeworkAddKeyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для добавления домашки."""
+    addKeyboard = InlineKeyboardBuilder()
+    addKeyboard.button(text="🔙 Отмена", callback_data="homework_cancel")
+    return addKeyboard.as_markup()
+
+
+def homeworkViewKeyboard(homework_idx: int) -> InlineKeyboardMarkup:
+    """Клавиатура для просмотра конкретной домашки."""
+    viewKeyboard = InlineKeyboardBuilder()
+    viewKeyboard.button(text="🗑 Удалить", callback_data=f"homework_delete_{homework_idx}")
+    viewKeyboard.button(text="🔙 Назад", callback_data="homework_back_to_list")
+    viewKeyboard.adjust(1, 1)
+    return viewKeyboard.as_markup()
+
+
+def settingsInlineKeyboard() -> InlineKeyboardMarkup:
+    """Инлайн клавиатура для настроек (для callback handlers)."""
+    settingsKeyboard = InlineKeyboardBuilder()
+    settingsKeyboard.button(text="⏰ Уведомления перед парой", callback_data="settings_notify_before")
+    settingsKeyboard.button(text="📅 Уведомления перед днём", callback_data="settings_notify_day")
+    settingsKeyboard.button(text="🗑 Сброс аккаунта", callback_data="settings_reset")
+    settingsKeyboard.button(text="🔙 Назад", callback_data="settings_back")
+    settingsKeyboard.adjust(2, 2)
+    return settingsKeyboard.as_markup()

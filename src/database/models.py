@@ -32,6 +32,7 @@ class Schedule(Base):
     start_time: Mapped[int] = mapped_column(Integer)  # seconds from start of day
     teacher: Mapped[str] = mapped_column(String(255))
     room: Mapped[str] = mapped_column(String(50))
+    lesson_type: Mapped[str] = mapped_column(String(10), nullable=True)  # л, пр, лр
     hash: Mapped[str] = mapped_column(String(255))
 
     group: Mapped["Group"] = relationship(back_populates="schedules")
@@ -44,7 +45,7 @@ class TgUser(Base):
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
     notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_time: Mapped[int] = mapped_column(Integer, nullable=True)  # seconds from start of day
-    notify_before_min: Mapped[str] = mapped_column(Integer, default=15)
+    notify_before_min: Mapped[int] = mapped_column(Integer, default=15)
 
     group: Mapped["Group"] = relationship(back_populates="users")
     homeworks: Mapped[list["Homework"]] = relationship(
@@ -66,7 +67,9 @@ class Homework(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tg_user_id: Mapped[int] = mapped_column(ForeignKey("tg_users.tg_id"))
     name: Mapped[str] = mapped_column(String(255))
-    file_id: Mapped[str] = mapped_column(String(255))               #Telegram file_id
+    file_id: Mapped[str] = mapped_column(String(255), nullable=True)  # Telegram file_id
+    description: Mapped[str] = mapped_column(String(2000), nullable=True)  # текст домашки
+    remind_time: Mapped[int] = mapped_column(Integer, nullable=True)  # timestamp для напоминания
 
     user: Mapped["TgUser"] = relationship(back_populates="homeworks")
 
