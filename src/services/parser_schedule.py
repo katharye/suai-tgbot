@@ -141,10 +141,6 @@ async def get_schedule_alls_groups():
     for group_name, group_id in groups_ids.items():
         schedule = await get_schedule_group(group_id)
         all_schedules[group_name] = schedule
-    
+
     return all_schedules
 
-async def main():
-    await get_schedule_group(7382)
-# 
-asyncio.run(main())
