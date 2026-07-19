@@ -46,7 +46,7 @@ pkgs.mkShell {
     ]}:$LD_LIBRARY_PATH
 
     if [ "$FIRST_TIME" = true ]; then
-      pip install aiogram python-dotenv aiohttp bs4
+      pip install -r requirements.txt
     fi
   '';
 }

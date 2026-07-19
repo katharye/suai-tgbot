@@ -1,9 +1,10 @@
 import asyncio
+import random
 from datetime import datetime, time, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from database.models import TgUser
+from database.models import VkUser
 from database.requests import (
     get_schedule,
     get_due_homework_reminders,
@@ -26,6 +27,16 @@ DAYS_TITLE = {
     "суббота": "Субботу",
     "воскресенье": "Воскресенье",
 }
+
+
+async def _send_vk_message(bot, peer_id: int, text: str, attachment: str | None = None) -> None:
+    """Отправить сообщение через VK API (аналог bot.send_message/send_document из aiogram)."""
+    await bot.api.messages.send(
+        peer_id=peer_id,
+        message=text,
+        attachment=attachment,
+        random_id=random.randint(1, 2**31 - 1),
+    )
 
 
 def notify_before_as_minutes(value: int | None) -> int | None:
@@ -54,7 +65,7 @@ async def check_and_send_notifications(bot, session: AsyncSession):
     print(f"  Current weekday: {current_weekday}")
     print(f"  Week type: {week_type}")
 
-    stmt = select(TgUser).where(TgUser.notify_enabled == True)
+    stmt = select(VkUser).where(VkUser.notify_enabled == True)
     result = await session.execute(stmt)
     users = result.scalars().all()
 
@@ -67,7 +78,7 @@ async def check_and_send_notifications(bot, session: AsyncSession):
                 (user.notify_time % 3600) // 60,
             )
             if current_time.hour == notify_time.hour and current_time.minute == notify_time.minute:
-                print(f"    -> Sending day notification to user {user.tg_id}")
+                print(f"    -> Sending day notification to user {user.vk_id}")
                 await send_day_notification(bot, user, session, current_weekday, week_type)
 
         if notify_before_as_minutes(user.notify_before_min) is not None:
@@ -76,7 +87,7 @@ async def check_and_send_notifications(bot, session: AsyncSession):
     await send_homework_reminders(bot, session, now)
 
 
-async def send_day_notification(bot, user: TgUser, session: AsyncSession, weekday: str, week_type: str):
+async def send_day_notification(bot, user: VkUser, session: AsyncSession, weekday: str, week_type: str):
     """Отправляет уведомление о всех парах на день."""
     try:
         schedule = await get_schedule(
@@ -84,14 +95,14 @@ async def send_day_notification(bot, user: TgUser, session: AsyncSession, weekda
             group_id=user.group_id,
             week=week_type,
             weekday=weekday,
-            tg_id=user.tg_id,
+            vk_id=user.vk_id,
         )
 
         day_title = DAYS_TITLE.get(weekday, weekday.capitalize())
 
         if not schedule:
-            await bot.send_message(user.tg_id, f"📅 На {day_title.lower()} пар нет 🎉")
-            print(f"    [send_day_notification] Sent 'no lessons' to {user.tg_id}")
+            await _send_vk_message(bot, user.vk_id, f"📅 На {day_title.lower()} пар нет 🎉")
+            print(f"    [send_day_notification] Sent 'no lessons' to {user.vk_id}")
             return
 
         schedule_sorted = sorted(schedule, key=lambda x: x.class_num)
@@ -106,14 +117,14 @@ async def send_day_notification(bot, user: TgUser, session: AsyncSession, weekda
             response += f"   🏢 Кабинет: {lesson.room}\n"
             response += f"   👨‍🏫 {lesson.teacher}\n\n"
 
-        await bot.send_message(user.tg_id, response)
-        print(f"    [send_day_notification] Sent schedule ({len(schedule_sorted)} lessons) to {user.tg_id}")
+        await _send_vk_message(bot, user.vk_id, response)
+        print(f"    [send_day_notification] Sent schedule ({len(schedule_sorted)} lessons) to {user.vk_id}")
 
     except Exception as e:
-        print(f"Error sending day notification to user {user.tg_id}: {e}")
+        print(f"Error sending day notification to user {user.vk_id}: {e}")
 
 
-async def send_lesson_notifications(bot, user: TgUser, session: AsyncSession, weekday: str, week_type: str, now: datetime):
+async def send_lesson_notifications(bot, user: VkUser, session: AsyncSession, weekday: str, week_type: str, now: datetime):
     """Отправляет уведомления перед каждой парой (расчет по минутам)."""
     try:
         notify_before = notify_before_as_minutes(user.notify_before_min)
@@ -125,7 +136,7 @@ async def send_lesson_notifications(bot, user: TgUser, session: AsyncSession, we
             group_id=user.group_id,
             week=week_type,
             weekday=weekday,
-            tg_id=user.tg_id,
+            vk_id=user.vk_id,
         )
 
         if not schedule:
@@ -143,11 +154,11 @@ async def send_lesson_notifications(bot, user: TgUser, session: AsyncSession, we
                     f"⏰ Пара {lesson.subject}{lesson_type_display} "
                     f"в кабинете {lesson.room} начнётся через {notify_before} минут!"
                 )
-                await bot.send_message(user.tg_id, message)
-                print(f"    [send_lesson_notifications] Sent warning to {user.tg_id} about {lesson.subject}")
+                await _send_vk_message(bot, user.vk_id, message)
+                print(f"    [send_lesson_notifications] Sent warning to {user.vk_id} about {lesson.subject}")
 
     except Exception as e:
-        print(f"Error sending lesson notification to user {user.tg_id}: {e}")
+        print(f"Error sending lesson notification to user {user.vk_id}: {e}")
 
 
 async def send_homework_reminders(bot, session: AsyncSession, now: datetime):
@@ -165,13 +176,10 @@ async def send_homework_reminders(bot, session: AsyncSession, now: datetime):
                 message += f"\n\n{homework.description}"
 
             try:
-                if homework.file_id:
-                    await bot.send_document(homework.tg_user_id, homework.file_id, caption=message)
-                else:
-                    await bot.send_message(homework.tg_user_id, message)
+                await _send_vk_message(bot, homework.vk_user_id, message, attachment=homework.file_id)
 
                 await clear_homework_remind_time(session, homework.id)
-                print(f"    [send_homework_reminders] Sent to {homework.tg_user_id}: {homework.name}")
+                print(f"    [send_homework_reminders] Sent to {homework.vk_user_id}: {homework.name}")
             except Exception as e:
                 print(f"    [send_homework_reminders] Error for homework {homework.id}: {e}")
     except Exception as e:

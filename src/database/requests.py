@@ -1,64 +1,64 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Group, TgUser, Schedule, Homework, Filter, HiddenSubject
+from database.models import Group, VkUser, Schedule, Homework, Filter, HiddenSubject
 
 #  Пользователи
-async def get_user(session: AsyncSession, tg_id: int) -> TgUser | None:
-    """Достать пользователя по его telegram-id."""
-    return await session.get(TgUser, tg_id)
+async def get_user(session: AsyncSession, vk_id: int) -> VkUser | None:
+    """Достать пользователя по его vk-id."""
+    return await session.get(VkUser, vk_id)
 
 
-async def create_user(session: AsyncSession, tg_id: int, group_id: int) -> TgUser:
+async def create_user(session: AsyncSession, vk_id: int, group_id: int) -> VkUser:
     """Создать нового пользователя и сохранить в базу."""
-    user = TgUser(tg_id=tg_id, group_id=group_id)
+    user = VkUser(vk_id=vk_id, group_id=group_id)
     session.add(user)
     await session.commit()
 
     return user
 
 
-async def get_or_create_user(session: AsyncSession, tg_id: int, group_id: int) -> TgUser:
+async def get_or_create_user(session: AsyncSession, vk_id: int, group_id: int) -> VkUser:
     """Достать пользователя, а если его нет — создать."""
-    user = await session.get(TgUser, tg_id)
+    user = await session.get(VkUser, vk_id)
 
     if user is None:
-        user = TgUser(tg_id=tg_id, group_id=group_id)
+        user = VkUser(vk_id=vk_id, group_id=group_id)
         session.add(user)
         await session.commit()
 
     return user
 
 
-async def delete_user(session: AsyncSession, tg_id: int) -> None:
-    """Удалить пользователя по tg_id.
+async def delete_user(session: AsyncSession, vk_id: int) -> None:
+    """Удалить пользователя по vk_id.
     Домашки и фильтры этого пользователя удалятся автоматически.
     """
-    user = await session.get(TgUser, tg_id)
+    user = await session.get(VkUser, vk_id)
     if user is not None:
         await session.delete(user)
         await session.commit()
 
 
-async def update_user_notify_time(session: AsyncSession, tg_id: int, notify_time: int | None) -> None:
+async def update_user_notify_time(session: AsyncSession, vk_id: int, notify_time: int | None) -> None:
     """Обновить время уведомлений пользователя (в секундах от начала дня)."""
-    user = await session.get(TgUser, tg_id)
+    user = await session.get(VkUser, vk_id)
     if user is not None:
         user.notify_time = notify_time
         await session.commit()
 
 
-async def update_user_notify_before_min(session: AsyncSession, tg_id: int, notify_before_min: int) -> None:
+async def update_user_notify_before_min(session: AsyncSession, vk_id: int, notify_before_min: int) -> None:
     """Обновить время уведомления перед парой (в минутах)."""
-    user = await session.get(TgUser, tg_id)
+    user = await session.get(VkUser, vk_id)
     if user is not None:
         user.notify_before_min = notify_before_min
         await session.commit()
 
 
-async def update_user_notify_enabled(session: AsyncSession, tg_id: int, notify_enabled: bool) -> None:
+async def update_user_notify_enabled(session: AsyncSession, vk_id: int, notify_enabled: bool) -> None:
     """Включить/выключить уведомления пользователя."""
-    user = await session.get(TgUser, tg_id)
+    user = await session.get(VkUser, vk_id)
     if user is not None:
         user.notify_enabled = notify_enabled
         await session.commit()
@@ -111,12 +111,12 @@ async def get_group_subjects(session: AsyncSession, group_id: int) -> list[str]:
     return subjects
 
 
-async def get_schedule(session: AsyncSession, group_id: int, week: str, weekday: str, tg_id: int = None) -> list[Schedule]:
+async def get_schedule(session: AsyncSession, group_id: int, week: str, weekday: str, vk_id: int = None) -> list[Schedule]:
     """Вернуть пары группы на конкретную неделю и день недели.
     Если week='all', возвращает пары для всех недель.
     Если week='up' (нечётная), возвращает пары для нечётных и всех недель.
     Если week='down' (чётная), возвращает пары для чётных и всех недель.
-    Если tg_id указан, фильтрует скрытые предметы пользователя."""
+    Если vk_id указан, фильтрует скрытые предметы пользователя."""
     from sqlalchemy import or_
     
     if week == "all":
@@ -146,9 +146,9 @@ async def get_schedule(session: AsyncSession, group_id: int, week: str, weekday:
     result = await session.execute(stmt)
     schedule = list(result.scalars().all())
     
-    # Фильтруем скрытые предметы, если указан tg_id
-    if tg_id is not None:
-        hidden_subjects = await get_hidden_subjects_by_day(session=session, tg_id=tg_id, weekday=weekday)
+    # Фильтруем скрытые предметы, если указан vk_id
+    if vk_id is not None:
+        hidden_subjects = await get_hidden_subjects_by_day(session=session, vk_id=vk_id, weekday=weekday)
         schedule = [lesson for lesson in schedule if lesson.subject not in hidden_subjects]
 
     return schedule
@@ -296,30 +296,30 @@ async def update_schedule_times(session: AsyncSession) -> int:
 
 
 #  Фильтры  — скрытые предметы
-async def get_hidden_subjects(session: AsyncSession, tg_id: int) -> list[str]:
+async def get_hidden_subjects(session: AsyncSession, vk_id: int) -> list[str]:
     """Вернуть список предметов, которые пользователь скрыл."""
-    stmt = select(Filter.subject).where(Filter.tg_user_id == tg_id)
+    stmt = select(Filter.subject).where(Filter.vk_user_id == vk_id)
     result = await session.execute(stmt)
     subjects = list(result.scalars().all())
 
     return subjects
 
 
-async def hide_subject(session: AsyncSession, tg_id: int, subject: str) -> None:
+async def hide_subject(session: AsyncSession, vk_id: int, subject: str) -> None:
     """Скрыть предмет для пользователя (добавить в фильтры)."""
-    stmt = select(Filter).where(Filter.tg_user_id == tg_id, Filter.subject == subject)
+    stmt = select(Filter).where(Filter.vk_user_id == vk_id, Filter.subject == subject)
     result = await session.execute(stmt)
     existing = result.scalar_one_or_none()
 
     if existing is None:
-        new_filter = Filter(tg_user_id=tg_id, subject=subject)
+        new_filter = Filter(vk_user_id=vk_id, subject=subject)
         session.add(new_filter)
         await session.commit()
 
 
-async def unhide_subject(session: AsyncSession, tg_id: int, subject: str) -> None:
+async def unhide_subject(session: AsyncSession, vk_id: int, subject: str) -> None:
     """Вернуть скрытый предмет (убрать из фильтров)."""
-    stmt = select(Filter).where(Filter.tg_user_id == tg_id, Filter.subject == subject)
+    stmt = select(Filter).where(Filter.vk_user_id == vk_id, Filter.subject == subject)
     result = await session.execute(stmt)
     existing = result.scalar_one_or_none()
 
@@ -329,10 +329,10 @@ async def unhide_subject(session: AsyncSession, tg_id: int, subject: str) -> Non
 
 
 #  Скрытые предметы по дням недели
-async def add_hidden_subject(session: AsyncSession, tg_id: int, subject: str, weekday: str) -> None:
+async def add_hidden_subject(session: AsyncSession, vk_id: int, subject: str, weekday: str) -> None:
     """Добавить предмет в список скрытых для конкретного дня недели."""
     stmt = select(HiddenSubject).where(
-        HiddenSubject.tg_user_id == tg_id,
+        HiddenSubject.vk_user_id == vk_id,
         HiddenSubject.subject == subject,
         HiddenSubject.weekday == weekday
     )
@@ -340,15 +340,15 @@ async def add_hidden_subject(session: AsyncSession, tg_id: int, subject: str, we
     existing = result.scalar_one_or_none()
 
     if existing is None:
-        hidden_subject = HiddenSubject(tg_user_id=tg_id, subject=subject, weekday=weekday)
+        hidden_subject = HiddenSubject(vk_user_id=vk_id, subject=subject, weekday=weekday)
         session.add(hidden_subject)
         await session.commit()
 
 
-async def get_hidden_subjects_by_day(session: AsyncSession, tg_id: int, weekday: str) -> list[str]:
+async def get_hidden_subjects_by_day(session: AsyncSession, vk_id: int, weekday: str) -> list[str]:
     """Вернуть список предметов, скрытых для конкретного дня недели."""
     stmt = select(HiddenSubject.subject).where(
-        HiddenSubject.tg_user_id == tg_id,
+        HiddenSubject.vk_user_id == vk_id,
         HiddenSubject.weekday == weekday
     )
     result = await session.execute(stmt)
@@ -357,10 +357,10 @@ async def get_hidden_subjects_by_day(session: AsyncSession, tg_id: int, weekday:
     return subjects
 
 
-async def remove_hidden_subject(session: AsyncSession, tg_id: int, subject: str, weekday: str) -> None:
+async def remove_hidden_subject(session: AsyncSession, vk_id: int, subject: str, weekday: str) -> None:
     """Убрать предмет из списка скрытых для конкретного дня недели."""
     stmt = select(HiddenSubject).where(
-        HiddenSubject.tg_user_id == tg_id,
+        HiddenSubject.vk_user_id == vk_id,
         HiddenSubject.subject == subject,
         HiddenSubject.weekday == weekday
     )
@@ -373,12 +373,12 @@ async def remove_hidden_subject(session: AsyncSession, tg_id: int, subject: str,
 
 
 # Домашние задания
-async def add_homework(session: AsyncSession, tg_id: int, name: str, description: str = None, file_id: str = None, remind_time: int = None) -> Homework:
+async def add_homework(session: AsyncSession, vk_id: int, name: str, description: str = None, file_id: str = None, remind_time: int = None) -> Homework:
     """Добавить домашнее задание."""
     from database.models import Homework
     
     homework = Homework(
-        tg_user_id=tg_id,
+        vk_user_id=vk_id,
         name=name,
         description=description,
         file_id=file_id,
@@ -391,12 +391,12 @@ async def add_homework(session: AsyncSession, tg_id: int, name: str, description
     return homework
 
 
-async def get_user_homeworks(session: AsyncSession, tg_id: int) -> list[Homework]:
+async def get_user_homeworks(session: AsyncSession, vk_id: int) -> list[Homework]:
     """Получить все домашние задания пользователя."""
     from database.models import Homework
     from sqlalchemy import select
     
-    stmt = select(Homework).where(Homework.tg_user_id == tg_id).order_by(Homework.id)
+    stmt = select(Homework).where(Homework.vk_user_id == vk_id).order_by(Homework.id)
     result = await session.execute(stmt)
     homeworks = list(result.scalars().all())
     

@@ -1,232 +1,251 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from vkbottle import Callback, Keyboard, KeyboardButtonColor
 
-def generateGroupsKeyboard(groups: list[str]) -> InlineKeyboardMarkup:
-    groupsKeyboard = InlineKeyboardBuilder()
+DAYS_OF_WEEK = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+DAYS_TITLE = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
-    for group in groups:
-        groupsKeyboard.button(text=group, callback_data=f"group_{group}")
-    groupsKeyboard.button(
-        text="Назад", 
-        callback_data="SETTUP_BACK", 
-        style="danger",
-        icon_custom_emoji_id="5854967531793550989")
 
-    buttons_count = len(groups)
-    rowsOfFour = buttons_count // 4
-    remainder = buttons_count % 4
-    adjust_shema = [4] * rowsOfFour
-    adjust_shema.append(remainder)
+def generateGroupsKeyboard(groups: list[str]) -> str:
+    kb = Keyboard(inline=True)
 
-    groupsKeyboard.adjust(*adjust_shema)
-    return groupsKeyboard.as_markup()
+    for i, group in enumerate(groups):
+        if i and i % 4 == 0:
+            kb.row()
+        kb.add(Callback(group, payload={"cmd": f"group_{group}"}))
 
-def applyResetKeyboard() -> InlineKeyboardMarkup:
-    resetKeyboard = InlineKeyboardBuilder()
-    resetKeyboard.button(text="Да", callback_data="RESET_YES", 
-                         style="success", icon_custom_emoji_id="5373084673767407538")
-    resetKeyboard.button(text="Нет", callback_data="RESET_NO", 
-                         style="danger", icon_custom_emoji_id="5375142362534148649")
-    return resetKeyboard.as_markup()
+    kb.row()
+    kb.add(Callback("Назад", payload={"cmd": "SETTUP_BACK"}), color=KeyboardButtonColor.NEGATIVE)
 
-def notifyBeforeLessonsKeyboard() -> InlineKeyboardMarkup:
-    notifyKeyboard = InlineKeyboardBuilder()
+    return kb.get_json()
 
-    for notifyTime in range(5, 31, 5):
-        notifyKeyboard.button(text=f"{notifyTime} минут", 
-                              callback_data=f"BEFORELESSONS_{notifyTime}", 
-                              icon_custom_emoji_id="5974076810386738645"
-        )
-    notifyKeyboard.button(text="Своё значение", 
-                          callback_data="USERS_TIME_BEFORELESSONS", 
-                          icon_custom_emoji_id="5371053145646441722",
-                          style="primary"
+
+def applyResetKeyboard() -> str:
+    kb = Keyboard(inline=True)
+    kb.add(Callback("Да", payload={"cmd": "RESET_YES"}), color=KeyboardButtonColor.POSITIVE)
+    kb.add(Callback("Нет", payload={"cmd": "RESET_NO"}), color=KeyboardButtonColor.NEGATIVE)
+    return kb.get_json()
+
+
+def notifyBeforeLessonsKeyboard() -> str:
+    kb = Keyboard(inline=True)
+
+    times = list(range(5, 31, 5))
+    for i, notify_time in enumerate(times):
+        if i and i % 2 == 0:
+            kb.row()
+        kb.add(Callback(f"{notify_time} минут", payload={"cmd": f"BEFORELESSONS_{notify_time}"}))
+
+    kb.row()
+    kb.add(
+        Callback("Своё значение", payload={"cmd": "USERS_TIME_BEFORELESSONS"}),
+        color=KeyboardButtonColor.PRIMARY,
+    )
+    kb.row()
+    kb.add(
+        Callback("Не присылать", payload={"cmd": "BEFORELESSONS_DONT_NOTIFY"}),
+        color=KeyboardButtonColor.NEGATIVE,
     )
 
-    notifyKeyboard.button(text="Не присылать", 
-                          callback_data="BEFORELESSONS_DONT_NOTIFY", 
-                          icon_custom_emoji_id="5974565736578813237",
-                          style="danger"
-    )
-
-    adjust_shema = [2] * 3 + [1] * 2
-    notifyKeyboard.adjust(*adjust_shema)
-    return notifyKeyboard.as_markup()
+    return kb.get_json()
 
 
-def dayNavigationKeyboard(current_day_index: int, show_image: bool = False, week_type: str = "all") -> InlineKeyboardMarkup:
+def dayNavigationKeyboard(current_day_index: int, show_image: bool = False, week_type: str = "all") -> str:
     """Клавиатура для навигации по дням недели."""
-    navKeyboard = InlineKeyboardBuilder()
-    
-    # Кнопка переключения текст/картинка
+    kb = Keyboard(inline=True)
+
     if show_image:
-        navKeyboard.button(text="📝 Текст", callback_data="toggle_text")
+        kb.add(Callback("📝 Текст", payload={"cmd": "toggle_text"}))
     else:
-        navKeyboard.button(text="🖼️ Картинка", callback_data="toggle_image")
-    
-    # Кнопки переключения типа недели
-    week_buttons = []
+        kb.add(Callback("🖼️ Картинка", payload={"cmd": "toggle_image"}))
+
+    kb.row()
+
     if week_type == "all":
-        week_buttons.append(("Все недели", "week_all"))
-        week_buttons.append(("Нечётная", "week_up"))
-        week_buttons.append(("Чётная", "week_down"))
+        kb.add(Callback("Все недели", payload={"cmd": "week_all"}))
+        kb.add(Callback("Нечётная", payload={"cmd": "week_up"}))
+        kb.add(Callback("Чётная", payload={"cmd": "week_down"}))
     elif week_type == "up":
-        week_buttons.append(("Все недели", "week_all"))
-        week_buttons.append(("🔵 Нечётная", "week_up"))
-        week_buttons.append(("Чётная", "week_down"))
+        kb.add(Callback("Все недели", payload={"cmd": "week_all"}))
+        kb.add(Callback("🔵 Нечётная", payload={"cmd": "week_up"}))
+        kb.add(Callback("Чётная", payload={"cmd": "week_down"}))
     elif week_type == "down":
-        week_buttons.append(("Все недели", "week_all"))
-        week_buttons.append(("Нечётная", "week_up"))
-        week_buttons.append(("🟢 Чётная", "week_down"))
-    
-    for text, callback in week_buttons:
-        navKeyboard.button(text=text, callback_data=callback)
-    
-    # Кнопка предыдущего дня
+        kb.add(Callback("Все недели", payload={"cmd": "week_all"}))
+        kb.add(Callback("Нечётная", payload={"cmd": "week_up"}))
+        kb.add(Callback("🟢 Чётная", payload={"cmd": "week_down"}))
+
+    kb.row()
     prev_day = (current_day_index - 1) % 7
-    navKeyboard.button(text="◀️", callback_data=f"day_{prev_day}")
-    
-    # Кнопка следующего дня
     next_day = (current_day_index + 1) % 7
-    navKeyboard.button(text="▶️", callback_data=f"day_{next_day}")
-    
-    navKeyboard.adjust(1, 3, 2)
-    return navKeyboard.as_markup()
+    kb.add(Callback("◀️", payload={"cmd": f"day_{prev_day}"}))
+    kb.add(Callback("▶️", payload={"cmd": f"day_{next_day}"}))
+
+    return kb.get_json()
 
 
-def weekViewKeyboard(show_image: bool = False) -> InlineKeyboardMarkup:
+def weekViewKeyboard() -> str:
     """Клавиатура для выбора режима просмотра недели."""
-    weekKeyboard = InlineKeyboardBuilder()
-    
-    weekKeyboard.button(text="📅 Выбрать день", callback_data="week_select_day")
-    weekKeyboard.button(text="🗓 Вся неделя", callback_data="week_show_all")
-    
-    weekKeyboard.adjust(2)
-    return weekKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    kb.add(Callback("📅 Выбрать день", payload={"cmd": "week_select_day"}))
+    kb.add(Callback("🗓 Вся неделя", payload={"cmd": "week_show_all"}))
+    return kb.get_json()
 
 
-def weekToggleKeyboard(show_image: bool = False) -> InlineKeyboardMarkup:
+def weekToggleKeyboard(show_image: bool = False) -> str:
     """Клавиатура для переключения текст/картинка при просмотре недели."""
-    weekKeyboard = InlineKeyboardBuilder()
-    
+    kb = Keyboard(inline=True)
     if show_image:
-        weekKeyboard.button(text="📝 Текст", callback_data="week_toggle_text")
+        kb.add(Callback("📝 Текст", payload={"cmd": "week_toggle_text"}))
     else:
-        weekKeyboard.button(text="🖼️ Картинка", callback_data="week_toggle_image")
-    
-    weekKeyboard.adjust(1)
-    return weekKeyboard.as_markup()
+        kb.add(Callback("🖼️ Картинка", payload={"cmd": "week_toggle_image"}))
+    return kb.get_json()
 
 
-def nextWeekViewKeyboard(show_image: bool = False) -> InlineKeyboardMarkup:
+def nextWeekViewKeyboard() -> str:
     """Клавиатура для выбора режима просмотра следующей недели."""
-    weekKeyboard = InlineKeyboardBuilder()
-    
-    weekKeyboard.button(text="📅 Выбрать день", callback_data="next_week_select_day")
-    weekKeyboard.button(text="🗓 Вся неделя", callback_data="next_week_show_all")
-    
-    weekKeyboard.adjust(2)
-    return weekKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    kb.add(Callback("📅 Выбрать день", payload={"cmd": "next_week_select_day"}))
+    kb.add(Callback("🗓 Вся неделя", payload={"cmd": "next_week_show_all"}))
+    return kb.get_json()
 
 
-def nextWeekToggleKeyboard(show_image: bool = False) -> InlineKeyboardMarkup:
+def nextWeekToggleKeyboard(show_image: bool = False) -> str:
     """Клавиатура для переключения текст/картинка при просмотре следующей недели."""
-    weekKeyboard = InlineKeyboardBuilder()
-    
+    kb = Keyboard(inline=True)
     if show_image:
-        weekKeyboard.button(text="📝 Текст", callback_data="next_week_toggle_text")
+        kb.add(Callback("📝 Текст", payload={"cmd": "next_week_toggle_text"}))
     else:
-        weekKeyboard.button(text="🖼️ Картинка", callback_data="next_week_toggle_image")
-    
-    weekKeyboard.adjust(1)
-    return weekKeyboard.as_markup()
+        kb.add(Callback("🖼️ Картинка", payload={"cmd": "next_week_toggle_image"}))
+    return kb.get_json()
 
 
-def daySelectionKeyboard() -> InlineKeyboardMarkup:
+def daySelectionKeyboard() -> str:
     """Клавиатура для выбора конкретного дня недели."""
-    dayKeyboard = InlineKeyboardBuilder()
-    
-    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    for i, day in enumerate(days):
-        dayKeyboard.button(text=day, callback_data=f"select_day_{i}")
-    
-    dayKeyboard.adjust(2, 2, 2, 1)
-    return dayKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    for i, day in enumerate(DAYS_TITLE):
+        if i and i % 2 == 0:
+            kb.row()
+        kb.add(Callback(day, payload={"cmd": f"select_day_{i}"}))
+    return kb.get_json()
 
 
-def nextDaySelectionKeyboard() -> InlineKeyboardMarkup:
+def nextDaySelectionKeyboard() -> str:
     """Клавиатура для выбора конкретного дня следующей недели."""
-    dayKeyboard = InlineKeyboardBuilder()
-    
-    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    for i, day in enumerate(days):
-        dayKeyboard.button(text=day, callback_data=f"select_next_day_{i}")
-    
-    dayKeyboard.adjust(2, 2, 2, 1)
-    return dayKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    for i, day in enumerate(DAYS_TITLE):
+        if i and i % 2 == 0:
+            kb.row()
+        kb.add(Callback(day, payload={"cmd": f"select_next_day_{i}"}))
+    return kb.get_json()
 
 
-def hideSubjectDayKeyboard() -> InlineKeyboardMarkup:
+def hideSubjectDayKeyboard() -> str:
     """Клавиатура для выбора дня недели для скрытия предмета."""
-    dayKeyboard = InlineKeyboardBuilder()
-    
-    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    for i, day in enumerate(days):
-        dayKeyboard.button(text=day, callback_data=f"hide_day_{i}")
-    
-    dayKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
-    dayKeyboard.adjust(2, 2, 2, 1, 1)
-    return dayKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    for i, day in enumerate(DAYS_TITLE):
+        if i and i % 2 == 0:
+            kb.row()
+        kb.add(Callback(day, payload={"cmd": f"hide_day_{i}"}))
+    kb.row()
+    kb.add(Callback("🔙 Назад", payload={"cmd": "back_to_main_menu"}))
+    return kb.get_json()
 
 
-def viewHiddenSubjectDayKeyboard() -> InlineKeyboardMarkup:
+def viewHiddenSubjectDayKeyboard() -> str:
     """Клавиатура для выбора дня недели для просмотра скрытых предметов."""
-    dayKeyboard = InlineKeyboardBuilder()
-    
-    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    for i, day in enumerate(days):
-        dayKeyboard.button(text=day, callback_data=f"view_hidden_day_{i}")
-    
-    dayKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
-    dayKeyboard.adjust(2, 2, 2, 1, 1)
-    return dayKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    for i, day in enumerate(DAYS_TITLE):
+        if i and i % 2 == 0:
+            kb.row()
+        kb.add(Callback(day, payload={"cmd": f"view_hidden_day_{i}"}))
+    kb.row()
+    kb.add(Callback("🔙 Назад", payload={"cmd": "back_to_main_menu"}))
+    return kb.get_json()
 
 
-def homeworkListKeyboard(homeworks: list) -> InlineKeyboardMarkup:
+def dayNavWithSubjectsKeyboard(day_index: int, subject_prefix: str, subjects: list[str], back_cmd: str, nav_cmd_prefix: str) -> str:
+    """Общая клавиатура: список предметов (по индексу) + навигация по дням + кнопка в меню."""
+    kb = Keyboard(inline=True)
+
+    for idx, _subject in enumerate(subjects):
+        kb.row()
+        kb.add(Callback(_subject, payload={"cmd": f"{subject_prefix}{idx}"}))
+
+    kb.row()
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    kb.add(Callback(f"◀ {DAYS_TITLE[prev_day_index]}", payload={"cmd": f"{nav_cmd_prefix}{prev_day_index}"}))
+    kb.add(Callback(f"{DAYS_TITLE[next_day_index]} ▶", payload={"cmd": f"{nav_cmd_prefix}{next_day_index}"}))
+    kb.row()
+    kb.add(Callback("🔙 В меню", payload={"cmd": back_cmd}))
+
+    return kb.get_json()
+
+
+def dayNavOnlyKeyboard(day_index: int, back_cmd: str, nav_cmd_prefix: str) -> str:
+    """Клавиатура навигации по дням без предметов (когда список пуст)."""
+    kb = Keyboard(inline=True)
+    prev_day_index = (day_index - 1) % 7
+    next_day_index = (day_index + 1) % 7
+    kb.add(Callback(f"◀ {DAYS_TITLE[prev_day_index]}", payload={"cmd": f"{nav_cmd_prefix}{prev_day_index}"}))
+    kb.add(Callback(f"{DAYS_TITLE[next_day_index]} ▶", payload={"cmd": f"{nav_cmd_prefix}{next_day_index}"}))
+    kb.row()
+    kb.add(Callback("🔙 В меню", payload={"cmd": back_cmd}))
+    return kb.get_json()
+
+
+def confirmUnhideKeyboard(subject_idx: int) -> str:
+    kb = Keyboard(inline=True)
+    kb.add(Callback("❌ Удалить из скрытых", payload={"cmd": f"remove_subj_{subject_idx}"}), color=KeyboardButtonColor.NEGATIVE)
+    kb.row()
+    kb.add(Callback("🔙 Назад", payload={"cmd": "back_to_hidden"}))
+    return kb.get_json()
+
+
+def hiddenSubjectsListKeyboard(subjects: list[str]) -> str:
+    kb = Keyboard(inline=True)
+    for idx, subject in enumerate(subjects):
+        kb.row()
+        kb.add(Callback(subject, payload={"cmd": f"view_subj_{idx}"}))
+    return kb.get_json()
+
+
+def homeworkListKeyboard(homeworks: list) -> str:
     """Клавиатура для списка домашних заданий."""
-    homeworkKeyboard = InlineKeyboardBuilder()
-    
+    kb = Keyboard(inline=True)
+
     for idx, homework in enumerate(homeworks):
-        homeworkKeyboard.button(text=homework.name, callback_data=f"homework_view_{idx}")
-    
-    homeworkKeyboard.button(text="➕ Добавить домашку", callback_data="homework_add")
-    homeworkKeyboard.button(text="🔙 Назад", callback_data="back_to_main_menu")
-    homeworkKeyboard.adjust(1, 1, 1)
-    return homeworkKeyboard.as_markup()
+        kb.row()
+        kb.add(Callback(homework.name, payload={"cmd": f"homework_view_{idx}"}))
+
+    kb.row()
+    kb.add(Callback("➕ Добавить домашку", payload={"cmd": "homework_add"}), color=KeyboardButtonColor.POSITIVE)
+    kb.row()
+    kb.add(Callback("🔙 Назад", payload={"cmd": "back_to_main_menu"}))
+
+    return kb.get_json()
 
 
-def homeworkAddKeyboard() -> InlineKeyboardMarkup:
+def homeworkAddKeyboard() -> str:
     """Клавиатура для добавления домашки."""
-    addKeyboard = InlineKeyboardBuilder()
-    addKeyboard.button(text="🔙 Отмена", callback_data="homework_cancel")
-    return addKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    kb.add(Callback("🔙 Отмена", payload={"cmd": "homework_cancel"}), color=KeyboardButtonColor.NEGATIVE)
+    return kb.get_json()
 
 
-def homeworkViewKeyboard(homework_idx: int) -> InlineKeyboardMarkup:
+def homeworkViewKeyboard(homework_idx: int) -> str:
     """Клавиатура для просмотра конкретной домашки."""
-    viewKeyboard = InlineKeyboardBuilder()
-    viewKeyboard.button(text="🗑 Удалить", callback_data=f"homework_delete_{homework_idx}")
-    viewKeyboard.button(text="🔙 Назад", callback_data="homework_back_to_list")
-    viewKeyboard.adjust(1, 1)
-    return viewKeyboard.as_markup()
+    kb = Keyboard(inline=True)
+    kb.add(Callback("🗑 Удалить", payload={"cmd": f"homework_delete_{homework_idx}"}), color=KeyboardButtonColor.NEGATIVE)
+    kb.row()
+    kb.add(Callback("🔙 Назад", payload={"cmd": "homework_back_to_list"}))
+    return kb.get_json()
 
 
-def settingsInlineKeyboard() -> InlineKeyboardMarkup:
-    """Инлайн клавиатура для настроек (для callback handlers)."""
-    settingsKeyboard = InlineKeyboardBuilder()
-    settingsKeyboard.button(text="⏰ Уведомления перед парой", callback_data="settings_notify_before")
-    settingsKeyboard.button(text="📅 Уведомления перед днём", callback_data="settings_notify_day")
-    settingsKeyboard.button(text="🗑 Сброс аккаунта", callback_data="settings_reset")
-    settingsKeyboard.button(text="🔙 Назад", callback_data="settings_back")
-    settingsKeyboard.adjust(2, 2)
-    return settingsKeyboard.as_markup()
+def settingsInlineKeyboard() -> str:
+    """Инлайн клавиатура для настроек (для message_event хендлеров)."""
+    kb = Keyboard(inline=True)
+    kb.add(Callback("⏰ Уведомления перед парой", payload={"cmd": "settings_notify_before"}))
+    kb.add(Callback("📅 Уведомления перед днём", payload={"cmd": "settings_notify_day"}))
+    kb.row()
+    kb.add(Callback("🗑 Сброс аккаунта", payload={"cmd": "settings_reset"}), color=KeyboardButtonColor.NEGATIVE)
+    kb.add(Callback("🔙 Назад", payload={"cmd": "settings_back"}))
+    return kb.get_json()
