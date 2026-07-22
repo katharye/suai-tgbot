@@ -12,7 +12,7 @@ async def load_all_group_in_db(message: Message, session: AsyncSession):
     groups_dict = await get_ids_group()
     for group in groups_dict.keys():
         await get_or_create_group(session=session, name=group)
-    await message.reply(text="Готово")
+    await message.reply("Готово")
 
 
 @admin_labeler.message(text="clear schedule")

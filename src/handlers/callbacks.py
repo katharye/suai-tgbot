@@ -190,6 +190,7 @@ async def _render_day(event: MessageEvent, session: AsyncSession, day_index: int
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     weekday = DAYS_OF_WEEK[day_index]
     schedule = await get_schedule(session=session, group_id=user.group_id, week=week_type, weekday=weekday, vk_id=user.vk_id)
     kb = dayNavigationKeyboard(day_index, show_image=show_image, week_type=week_type)
@@ -205,7 +206,6 @@ async def _render_day(event: MessageEvent, session: AsyncSession, day_index: int
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("day_")})
 async def navigate_day(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("day_"):])
     data = await advance_state(event.peer_id, ScheduleNavigation.navigating, day_index=day_index)
     await _render_day(event, session, day_index, data.get("week_type", "all"), data.get("show_image", False))
@@ -213,14 +213,12 @@ async def navigate_day(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "toggle_image"})
 async def toggle_to_image(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.navigating, show_image=True)
     await _render_day(event, session, data.get("day_index", 0), data.get("week_type", "all"), True)
 
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "toggle_text"})
 async def toggle_to_text(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.navigating, show_image=False)
     await _render_day(event, session, data.get("day_index", 0), data.get("week_type", "all"), False)
 
@@ -233,7 +231,6 @@ async def week_select_day(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("select_day_")})
 async def select_day(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("select_day_"):])
     week_type = get_week_type()
     await advance_state(event.peer_id, ScheduleNavigation.navigating, day_index=day_index, show_image=False, week_type=week_type)
@@ -242,12 +239,12 @@ async def select_day(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "week_show_all"})
 async def week_show_all(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     user = await get_user(session=session, vk_id=event.user_id)
     if not user:
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     week_type = get_week_type()
     await advance_state(event.peer_id, ScheduleNavigation.week_viewing, week_type=week_type, show_image=False, is_next_week=False)
 
@@ -267,7 +264,6 @@ async def next_week_select_day(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("select_next_day_")})
 async def select_next_day(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("select_next_day_"):])
     current_week_type = get_week_type()
     next_week_type = "down" if current_week_type == "up" else "up"
@@ -277,12 +273,12 @@ async def select_next_day(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "next_week_show_all"})
 async def next_week_show_all(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     user = await get_user(session=session, vk_id=event.user_id)
     if not user:
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     current_week_type = get_week_type()
     next_week_type = "down" if current_week_type == "up" else "up"
     await advance_state(event.peer_id, ScheduleNavigation.week_viewing, week_type=next_week_type, show_image=False, is_next_week=True)
@@ -301,6 +297,7 @@ async def _render_week(event: MessageEvent, session: AsyncSession, week_type: st
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     week_schedule = {}
     for day_name in DAYS_OF_WEEK:
         week_schedule[day_name] = await get_schedule(session=session, group_id=user.group_id, week=week_type, weekday=day_name, vk_id=user.vk_id)
@@ -320,7 +317,6 @@ async def _render_week(event: MessageEvent, session: AsyncSession, week_type: st
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "week_toggle_image"})
 async def week_toggle_image(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.week_viewing, show_image=True)
     header = "эту неделю"
     await _render_week(event, session, data.get("week_type", "all"), header, True, weekToggleKeyboard(show_image=True))
@@ -328,7 +324,6 @@ async def week_toggle_image(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "week_toggle_text"})
 async def week_toggle_text(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.week_viewing, show_image=False)
     header = "эту неделю"
     await _render_week(event, session, data.get("week_type", "all"), header, False, weekToggleKeyboard(show_image=False))
@@ -336,7 +331,6 @@ async def week_toggle_text(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "next_week_toggle_image"})
 async def next_week_toggle_image(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.week_viewing, show_image=True)
     header = "следующую неделю"
     await _render_week(event, session, data.get("week_type", "all"), header, True, nextWeekToggleKeyboard(show_image=True))
@@ -344,7 +338,6 @@ async def next_week_toggle_image(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": "next_week_toggle_text"})
 async def next_week_toggle_text(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     data = await advance_state(event.peer_id, ScheduleNavigation.week_viewing, show_image=False)
     header = "следующую неделю"
     await _render_week(event, session, data.get("week_type", "all"), header, False, nextWeekToggleKeyboard(show_image=False))
@@ -352,7 +345,6 @@ async def next_week_toggle_text(event: MessageEvent, session: AsyncSession):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v in ("week_all", "week_up", "week_down")})
 async def change_week_type(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     new_week_type = event.payload["cmd"][len("week_"):]
 
     data = await get_state_data(event.peer_id)
@@ -381,6 +373,7 @@ async def _render_hide_subjects_for_day(event: MessageEvent, session: AsyncSessi
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     selected_day = DAYS_OF_WEEK[day_index]
     await advance_state(event.peer_id, HideSubject.selecting_subject, selected_day=selected_day, day_index=day_index)
 
@@ -399,23 +392,21 @@ async def _render_hide_subjects_for_day(event: MessageEvent, session: AsyncSessi
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("hide_day_")})
 async def hide_day_selected(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("hide_day_"):])
     await _render_hide_subjects_for_day(event, session, day_index)
 
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("nav_hide_day_")})
 async def nav_hide_day(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("nav_hide_day_"):])
     await _render_hide_subjects_for_day(event, session, day_index)
 
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("hide_subj_")})
 async def hide_subject_selected(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     user = await get_user(session=session, vk_id=event.user_id)
     if not user:
+        await event.send_empty_answer()
         return
 
     subject_idx = int(event.payload["cmd"][len("hide_subj_"):])
@@ -427,6 +418,7 @@ async def hide_subject_selected(event: MessageEvent, session: AsyncSession):
         await event.show_snackbar("Ошибка: предмет не найден")
         return
 
+    await event.send_empty_answer()
     subject = subjects_list[subject_idx]
     await add_hidden_subject(session=session, vk_id=user.vk_id, subject=subject, weekday=selected_day)
 
@@ -451,6 +443,7 @@ async def _render_hidden_subjects_for_day(event: MessageEvent, session: AsyncSes
         await event.show_snackbar("Сначала нужно пройти регистрацию")
         return
 
+    await event.send_empty_answer()
     selected_day = DAYS_OF_WEEK[day_index]
     await advance_state(event.peer_id, ViewHiddenSubjects.viewing_subjects, selected_day=selected_day, day_index=day_index)
 
@@ -470,14 +463,12 @@ async def _render_hidden_subjects_for_day(event: MessageEvent, session: AsyncSes
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("view_hidden_day_")})
 async def view_hidden_day_selected(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("view_hidden_day_"):])
     await _render_hidden_subjects_for_day(event, session, day_index)
 
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("nav_hidden_day_")})
 async def nav_hidden_day(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     day_index = int(event.payload["cmd"][len("nav_hidden_day_"):])
     await _render_hidden_subjects_for_day(event, session, day_index)
 
@@ -491,7 +482,6 @@ async def back_to_hidden_menu(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("view_subj_")})
 async def view_subject_selected(event: MessageEvent):
-    await event.send_empty_answer()
     subject_idx = int(event.payload["cmd"][len("view_subj_"):])
     data = await get_state_data(event.peer_id)
     hidden_subjects = data.get("hidden_subjects", [])
@@ -501,6 +491,7 @@ async def view_subject_selected(event: MessageEvent):
         await event.show_snackbar("Ошибка: предмет не найден")
         return
 
+    await event.send_empty_answer()
     subject = hidden_subjects[subject_idx]
     await event.edit_message(
         f"Предмет: {subject}\nДень: {selected_day}\n\nУдалить из скрытых?",
@@ -510,9 +501,9 @@ async def view_subject_selected(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("remove_subj_")})
 async def remove_subject(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     user = await get_user(session=session, vk_id=event.user_id)
     if not user:
+        await event.send_empty_answer()
         return
 
     subject_idx = int(event.payload["cmd"][len("remove_subj_"):])
@@ -524,6 +515,7 @@ async def remove_subject(event: MessageEvent, session: AsyncSession):
         await event.show_snackbar("Ошибка: предмет не найден")
         return
 
+    await event.send_empty_answer()
     subject = hidden_subjects[subject_idx]
     await remove_hidden_subject(session=session, vk_id=user.vk_id, subject=subject, weekday=selected_day)
 
@@ -573,7 +565,6 @@ async def homework_add_start(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("homework_view_")})
 async def homework_view(event: MessageEvent):
-    await event.send_empty_answer()
     homework_idx = int(event.payload["cmd"][len("homework_view_"):])
     data = await get_state_data(event.peer_id)
     homeworks = data.get("homeworks", [])
@@ -582,6 +573,7 @@ async def homework_view(event: MessageEvent):
         await event.show_snackbar("Ошибка: домашка не найдена")
         return
 
+    await event.send_empty_answer()
     homework = homeworks[homework_idx]
 
     response = f"📝 {homework.name}\n\n"
@@ -597,7 +589,6 @@ async def homework_view(event: MessageEvent):
 
 @callbacks_labeler.raw_event(GroupEventType.MESSAGE_EVENT, MessageEvent, payload_map={"cmd": lambda v: v.startswith("homework_delete_")})
 async def homework_delete(event: MessageEvent, session: AsyncSession):
-    await event.send_empty_answer()
     homework_idx = int(event.payload["cmd"][len("homework_delete_"):])
     data = await get_state_data(event.peer_id)
     homeworks = data.get("homeworks", [])
@@ -606,6 +597,7 @@ async def homework_delete(event: MessageEvent, session: AsyncSession):
         await event.show_snackbar("Ошибка: домашка не найдена")
         return
 
+    await event.send_empty_answer()
     homework = homeworks[homework_idx]
     await delete_homework(session=session, homework_id=homework.id)
 

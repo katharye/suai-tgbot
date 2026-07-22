@@ -111,7 +111,11 @@ async def get_group_subjects(session: AsyncSession, group_id: int) -> list[str]:
     return subjects
 
 
-async def get_schedule(session: AsyncSession, group_id: int, week: str, weekday: str, vk_id: int = None) -> list[Schedule]:
+async def get_schedule(session: AsyncSession, 
+                       group_id: int, 
+                       week: str, 
+                       weekday: str, 
+                       vk_id: int = None) -> list[Schedule]:
     """Вернуть пары группы на конкретную неделю и день недели.
     Если week='all', возвращает пары для всех недель.
     Если week='up' (нечётная), возвращает пары для нечётных и всех недель.
@@ -274,7 +278,7 @@ async def update_schedule_times(session: AsyncSession) -> int:
     """Обновить время во всех парах расписания на основе данных из class_times.
     Возвращает количество обновлённых записей."""
     from database.models import Schedule
-    from sqlalchemy import select, update
+    from sqlalchemy import update
     
     # Получаем все времена пар
     class_times = await get_all_class_times(session=session)
@@ -373,7 +377,13 @@ async def remove_hidden_subject(session: AsyncSession, vk_id: int, subject: str,
 
 
 # Домашние задания
-async def add_homework(session: AsyncSession, vk_id: int, name: str, description: str = None, file_id: str = None, remind_time: int = None) -> Homework:
+async def add_homework(session: AsyncSession, 
+                       vk_id: int, 
+                       name: str, 
+                       description: 
+                       str = None, 
+                       file_id: str = None, 
+                       remind_time: int = None) -> Homework:
     """Добавить домашнее задание."""
     from database.models import Homework
     
